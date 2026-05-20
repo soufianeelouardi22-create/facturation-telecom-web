@@ -1,32 +1,46 @@
-from flask import Blueprint, render_template, current_app, abort
+import sqlite3
+import os
+from flask import Blueprint, render_template
 from flask_login import login_required, current_user
-import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 main_bp = Blueprint('main', __name__)
+
+DB_PATH = os.environ.get(
+    'DATABASE_PATH',
+    os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'database.db'))
+)
+
+
+def _query(sql, params=()):
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    rows = con.execute(sql, params).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
 
 
 @main_bp.route('/')
 @login_required
 def dashboard():
-    from modules.database import Database
-    db_path = current_app.config['DATABASE_PATH']
-    db = Database(db_path)
-
     stats = {}
     try:
         if current_user.is_fr:
-            # FR ne voit que ses propres données
-            factures = db.get_factures(code_magasin=current_user.code_magasin)
+            factures = _query(
+                "SELECT id FROM factures WHERE code_magasin = ?",
+                (current_user.code_magasin,)
+            )
             stats['mes_factures'] = len(factures)
-            stats['mon_code'] = current_user.code_magasin
+            stats['mon_code']     = current_user.code_magasin
         else:
-            magasins_best = db.get_tous_magasins('BESTMARK')
-            magasins_afri = db.get_tous_magasins('AFRINETWORKS')
-            factures      = db.get_factures()
-            stats['magasins_best'] = len(magasins_best)
-            stats['magasins_afri'] = len(magasins_afri)
-            stats['total_factures'] = len(factures)
+            stats['magasins_best']  = _query(
+                "SELECT COUNT(*) AS n FROM magasins WHERE societe = ?", ('BESTMARK',)
+            )[0]['n']
+            stats['magasins_afri']  = _query(
+                "SELECT COUNT(*) AS n FROM magasins WHERE societe = ?", ('AFRINETWORKS',)
+            )[0]['n']
+            stats['total_factures'] = _query(
+                "SELECT COUNT(*) AS n FROM factures"
+            )[0]['n']
     except Exception:
         pass
 

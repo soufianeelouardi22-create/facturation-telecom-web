@@ -1,30 +1,60 @@
+import json
+import os
+import sqlite3
 from flask import Blueprint, render_template, request, current_app, abort, send_file
 from flask_login import login_required, current_user
 from utils import role_required
-import os, sys, json
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 factures_bp = Blueprint('factures', __name__)
 
+DB_PATH = os.environ.get(
+    'DATABASE_PATH',
+    os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'database.db'))
+)
 
-def _get_db():
-    from modules.database import Database
-    return Database(current_app.config['DATABASE_PATH'])
+
+def _query(sql, params=()):
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    rows = con.execute(sql, params).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
+
+
+def _get_factures(code_magasin=None, mois=None, annee=None):
+    sql, params = "SELECT * FROM factures WHERE 1=1", []
+    if code_magasin is not None:
+        sql += " AND code_magasin = ?"; params.append(str(code_magasin))
+    if mois is not None:
+        sql += " AND mois = ?";         params.append(mois)
+    if annee is not None:
+        sql += " AND annee = ?";        params.append(annee)
+    sql += " ORDER BY annee DESC, mois DESC, code_magasin"
+    return _query(sql, params)
+
+
+def _get_facture_by_id(fact_id):
+    rows = _query("SELECT * FROM factures WHERE id = ?", (fact_id,))
+    return rows[0] if rows else None
+
+
+def _get_magasins(societe=None):
+    if societe:
+        return _query("SELECT * FROM magasins WHERE societe = ? ORDER BY code", (societe,))
+    return _query("SELECT * FROM magasins ORDER BY societe, code")
 
 
 def _enrich(factures, mois_list):
-    """Parse donnees_json and add nom_magasin / net_a_payer to each facture dict."""
     enriched = []
     for f in factures:
         row = dict(f)
         donnees = {}
         try:
-            raw = row.get('donnees_json') or '{}'
-            donnees = json.loads(raw)
+            donnees = json.loads(row.get('donnees_json') or '{}')
         except Exception:
             pass
-        row['nom_magasin']  = donnees.get('nom_magasin', '')
-        row['net_a_payer']  = donnees.get('net_a_payer', 0)
+        row['nom_magasin']    = donnees.get('nom_magasin', '')
+        row['net_a_payer']    = donnees.get('net_a_payer', 0)
         row['numero_facture'] = donnees.get('numero_facture', '')
         row['date_facture']   = donnees.get('date_facture', '')
         row['donnees']        = donnees
@@ -37,24 +67,20 @@ def _enrich(factures, mois_list):
 @factures_bp.route('/')
 @login_required
 def index():
-    db = _get_db()
-    societe      = request.args.get('societe', '').strip()
-    mois         = request.args.get('mois',  type=int)
-    annee        = request.args.get('annee', type=int)
-    code_search  = request.args.get('code',  '').strip().upper()
+    societe     = request.args.get('societe', '').strip()
+    mois        = request.args.get('mois',  type=int)
+    annee       = request.args.get('annee', type=int)
+    code_search = request.args.get('code',  '').strip().upper()
 
     if current_user.is_fr:
-        factures = db.get_factures(code_magasin=current_user.code_magasin,
-                                   mois=mois, annee=annee)
+        factures = _get_factures(code_magasin=current_user.code_magasin, mois=mois, annee=annee)
     else:
-        factures = db.get_factures(mois=mois, annee=annee)
+        factures = _get_factures(mois=mois, annee=annee)
         if societe:
             factures = [f for f in factures if f.get('societe') == societe]
 
-    settings  = current_app.config['SETTINGS']
-    mois_list = settings.get('mois', [])
-
-    factures = _enrich(factures, mois_list)
+    mois_list = current_app.config['SETTINGS'].get('mois', [])
+    factures  = _enrich(factures, mois_list)
 
     if code_search and not current_user.is_fr:
         factures = [f for f in factures
@@ -73,43 +99,29 @@ def index():
 @factures_bp.route('/<int:fact_id>/detail')
 @login_required
 def detail(fact_id):
-    db = _get_db()
-    factures = db.get_factures()
-    fact = next((f for f in factures if f['id'] == fact_id), None)
-
+    fact = _get_facture_by_id(fact_id)
     if not fact:
         abort(404)
-
     if current_user.is_fr and fact.get('code_magasin') != current_user.code_magasin:
         abort(403)
 
-    settings  = current_app.config['SETTINGS']
-    mois_list = settings.get('mois', [])
-
-    row = _enrich([fact], mois_list)[0]
-    return render_template('factures/detail.html', fact=row)
+    mois_list = current_app.config['SETTINGS'].get('mois', [])
+    return render_template('factures/detail.html', fact=_enrich([fact], mois_list)[0])
 
 
 @factures_bp.route('/<int:fact_id>/download')
 @login_required
 def download(fact_id):
-    db = _get_db()
-    factures = db.get_factures()
-    fact = next((f for f in factures if f['id'] == fact_id), None)
-
+    fact = _get_facture_by_id(fact_id)
     if not fact:
         abort(404)
-
     if current_user.is_fr and fact.get('code_magasin') != current_user.code_magasin:
         abort(403)
 
-    settings  = current_app.config['SETTINGS']
-    mois_list = settings.get('mois', [])
+    mois_list = current_app.config['SETTINGS'].get('mois', [])
     row = _enrich([fact], mois_list)[0]
 
-    # Lire le chemin PDF depuis donnees_json en priorité, sinon colonne fichier_pdf
     pdf_path = (row['donnees'].get('fichier_pdf') or fact.get('fichier_pdf') or '').strip()
-
     if not pdf_path or not os.path.exists(pdf_path):
         return render_template('factures/pdf_unavailable.html', fact=row), 404
 
@@ -121,9 +133,8 @@ def download(fact_id):
 @login_required
 @role_required('admin', 'agent')
 def magasins():
-    db = _get_db()
     societe  = request.args.get('societe')
-    magasins = db.get_tous_magasins(societe if societe else None)
+    magasins = _get_magasins(societe or None)
     return render_template('factures/magasins.html',
                            magasins=magasins,
                            selected_societe=societe)
