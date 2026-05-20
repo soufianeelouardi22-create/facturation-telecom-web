@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block title %}Mon Espace — {{ code }}{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- ── Header magasin ── -->
+  <div class="page-header">
+    <div>
+      <h1>🏪 Mon Espace</h1>
+      <p>
+        <strong>{{ magasin.nom or 'Magasin ' ~ code }}</strong>
+        &nbsp;·&nbsp; Code <code style="background:var(--bg); padding:2px 8px; border-radius:4px;">{{ code }}</code>
+        &nbsp;·&nbsp;
+        <span class="badge badge-{{ 'best' if magasin.societe == 'BESTMARK' else 'afri' }}">{{ magasin.societe }}</span>
+      </p>
+    </div>
+    <a href="{{ url_for('factures.index') }}" class="btn btn-gray btn-sm">Toutes mes factures</a>
+  </div>
+
+  <!-- ── Cards résumé ── -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:16px; margin-bottom:24px;">
+
+    <div class="card" style="padding:20px;">
+      <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Total {{ annee_courante }}</div>
+      <div style="font-size:24px; font-weight:700; color:var(--primary);">
+        {{ "%.2f"|format(total_annee) }}
+      </div>
+      <div style="font-size:12px; color:var(--text-m); margin-top:4px;">MAD</div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Meilleur mois {{ annee_courante }}</div>
+      {% if meilleur_mois %}
+      <div style="font-size:24px; font-weight:700; color:#38a169;">
+        {{ "%.2f"|format(meilleur_mois.net_a_payer|float) }}
+      </div>
+      <div style="font-size:12px; color:var(--text-m); margin-top:4px;">{{ meilleur_mois.mois_nom }} · MAD</div>
+      {% else %}
+      <div style="font-size:18px; font-weight:600; color:var(--text-l);">—</div>
+      {% endif %}
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Factures totales</div>
+      <div style="font-size:24px; font-weight:700;">{{ nb_factures }}</div>
+      <div style="font-size:12px; color:var(--text-m); margin-top:4px;">toutes périodes</div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Dernière facture</div>
+      {% if derniere %}
+      <div style="font-size:20px; font-weight:700;">{{ derniere.mois_nom }} {{ derniere.annee }}</div>
+      <div style="font-size:12px; color:var(--text-m); margin-top:4px;">
+        {{ "%.2f"|format(derniere.net_a_payer|float) }} MAD
+      </div>
+      {% else %}
+      <div style="font-size:18px; font-weight:600; color:var(--text-l);">—</div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- ── Graphique ── -->
+  <div class="card" style="padding:24px; margin-bottom:24px;">
+    <h3 style="font-size:14px; font-weight:600; color:var(--text-m); text-transform:uppercase; letter-spacing:.05em; margin:0 0 16px;">
+      Évolution NET À PAYER — 12 derniers mois
+    </h3>
+    <div style="position:relative; height:260px;">
+      <canvas id="chart-evolution"></canvas>
+    </div>
+  </div>
+
+  <!-- ── Tableau factures ── -->
+  <div class="card">
+    <div class="card-header">
+      Historique des factures
+      <span style="font-weight:400; color:var(--text-m); font-size:13px;">{{ factures|length }} au total</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mois</th>
+            <th>Année</th>
+            <th>N° Facture</th>
+            <th style="text-align:right;">NET À PAYER</th>
+            <th style="text-align:center;">PDF</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in factures %}
+          <tr>
+            <td>{{ f.mois_nom }}</td>
+            <td>{{ f.annee }}</td>
+            <td style="color:var(--text-m); font-size:12px;">{{ f.numero_facture or '—' }}</td>
+            <td style="text-align:right; font-weight:600;">
+              {{ "%.2f"|format(f.net_a_payer|float) }} MAD
+            </td>
+            <td style="text-align:center;">
+              {% if f.fichier_pdf %}
+              <a href="{{ url_for('factures.download', fact_id=f.id) }}"
+                 class="btn btn-success btn-sm">⬇ PDF</a>
+              {% else %}
+              <span style="color:var(--text-l); font-size:12px;">indisponible</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" style="text-align:center; color:var(--text-l); padding:32px;">
+              Aucune facture trouvée.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const labels = {{ chart_labels | tojson }};
+const values = {{ chart_values | tojson }};
+
+const ctx = document.getElementById('chart-evolution').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: labels,
+    datasets: [{
+      label: 'NET À PAYER (MAD)',
+      data: values,
+      backgroundColor: values.map(v => v > 0 ? 'rgba(66, 153, 225, 0.7)' : 'rgba(200,200,200,0.3)'),
+      borderColor:     values.map(v => v > 0 ? 'rgba(49, 130, 206, 1)'   : 'rgba(180,180,180,0.5)'),
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.parsed.y.toLocaleString('fr-MA', {minimumFractionDigits:2}) + ' MAD'
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: v => v.toLocaleString('fr-MA') + ' MAD'
+        },
+        grid: { color: 'rgba(0,0,0,0.05)' }
+      },
+      x: { grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endblock %}

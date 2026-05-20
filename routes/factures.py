@@ -129,6 +129,61 @@ def download(fact_id):
                      download_name=os.path.basename(pdf_path))
 
 
+@factures_bp.route('/mon-espace')
+@login_required
+@role_required('fr')
+def mon_espace():
+    mois_list = current_app.config['SETTINGS'].get('mois', [])
+    code      = current_user.code_magasin
+
+    # Toutes les factures du magasin, enrichies
+    factures = _enrich(_get_factures(code_magasin=code), mois_list)
+
+    # Infos magasin
+    rows = _query("SELECT nom, societe FROM magasins WHERE code = ?", (str(code),))
+    magasin = rows[0] if rows else {'nom': '', 'societe': ''}
+
+    # Année courante pour les stats
+    from datetime import date
+    annee_courante = date.today().year
+    factures_annee = [f for f in factures if f.get('annee') == annee_courante]
+
+    total_annee   = sum(float(f.get('net_a_payer') or 0) for f in factures_annee)
+    nb_factures   = len(factures)
+    derniere      = factures[0] if factures else None
+
+    meilleur_mois = None
+    if factures_annee:
+        meilleur_mois = max(factures_annee, key=lambda f: float(f.get('net_a_payer') or 0))
+
+    # Données graphique — 12 derniers mois glissants
+    from datetime import date
+    today  = date.today()
+    labels, values = [], []
+    for i in range(11, -1, -1):
+        month = today.month - i
+        year  = today.year
+        while month <= 0:
+            month += 12
+            year  -= 1
+        labels.append(mois_list[month - 1][:3] if mois_list else str(month))
+        match = next((f for f in factures if f.get('mois') == month and f.get('annee') == year), None)
+        values.append(float(match.get('net_a_payer') or 0) if match else 0)
+
+    return render_template('factures/mon_espace.html',
+                           factures=factures,
+                           mois_list=mois_list,
+                           magasin=magasin,
+                           code=code,
+                           total_annee=total_annee,
+                           nb_factures=nb_factures,
+                           derniere=derniere,
+                           meilleur_mois=meilleur_mois,
+                           annee_courante=annee_courante,
+                           chart_labels=labels,
+                           chart_values=values)
+
+
 @factures_bp.route('/magasins')
 @login_required
 @role_required('admin', 'agent')

@@ -43,8 +43,14 @@
     </li>
     {% else %}
     <li>
+      <a href="{{ url_for('factures.mon_espace') }}"
+         class="{{ 'active' if request.endpoint == 'factures.mon_espace' }}">
+        🏪 Mon Espace
+      </a>
+    </li>
+    <li>
       <a href="{{ url_for('factures.index') }}"
-         class="{{ 'active' if request.blueprint == 'factures' }}">
+         class="{{ 'active' if request.endpoint == 'factures.index' }}">
         📄 Mes Factures
       </a>
     </li>
