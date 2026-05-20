@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: facturation-telecom
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_PATH
+        value: /var/data/database.db
+      - key: SETTINGS_PATH
+        value: /var/data/settings.json
+      - key: PYTHONUTF8
+        value: "1"
+    disk:
+      name: facturation-data
+      mountPath: /var/data
+      sizeGB: 1

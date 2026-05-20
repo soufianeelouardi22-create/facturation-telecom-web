@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Magasins{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <h1>🏪 Gestion Magasins</h1>
+    <p>{{ magasins|length }} magasin(s) trouvé(s)</p>
+  </div>
+
+  <div class="card">
+    <form method="GET" class="filters">
+      <select name="societe" onchange="this.form.submit()">
+        <option value="">Toutes sociétés</option>
+        <option value="BESTMARK"     {{ 'selected' if selected_societe == 'BESTMARK' }}>BESTMARK</option>
+        <option value="AFRINETWORKS" {{ 'selected' if selected_societe == 'AFRINETWORKS' }}>AFRINETWORKS</option>
+      </select>
+      <a href="{{ url_for('factures.magasins') }}" class="btn btn-gray btn-sm">Réinitialiser</a>
+    </form>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Nom</th>
+            <th>Ville</th>
+            <th>Société</th>
+            <th>Type POS</th>
+            <th>Attestation</th>
+            <th>ICE</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in magasins %}
+          <tr>
+            <td><strong>{{ m.code }}</strong></td>
+            <td>{{ m.nom }}</td>
+            <td>{{ m.ville or '—' }}</td>
+            <td>
+              <span class="badge badge-{{ 'best' if m.societe == 'BESTMARK' else 'afri' }}">
+                {{ m.societe }}
+              </span>
+            </td>
+            <td>
+              <span class="badge badge-{{ 'gray' if m.type_pos == 'moral' else 'warning' }}">
+                {{ m.type_pos or '—' }}
+              </span>
+            </td>
+            <td>
+              {% if m.attestation == 'oui' %}
+              <span class="badge badge-success">Oui</span>
+              {% elif m.attestation == 'non' %}
+              <span class="badge badge-danger">Non</span>
+              {% else %}
+              <span class="badge badge-gray">—</span>
+              {% endif %}
+            </td>
+            <td style="font-size:11px; color:var(--text-m);">{{ m.ice or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" style="text-align:center; color:var(--text-l); padding:32px;">
+              Aucun magasin trouvé.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

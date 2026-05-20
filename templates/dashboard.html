@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Tableau de bord — Facturation Telecom{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <div class="page-header">
+    <h1>Bonjour, {{ current_user.username }} 👋</h1>
+    <p>
+      {% if current_user.is_fr %}
+        Bienvenue sur votre espace Franchisé — Code POS : <strong>{{ current_user.code_magasin }}</strong>
+      {% else %}
+        Tableau de bord — Gestion factures BESTMARK &amp; AFRINETWORKS
+      {% endif %}
+    </p>
+  </div>
+
+  <!-- Stats -->
+  {% if current_user.is_fr %}
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue">📄</div>
+      <div>
+        <div class="stat-value">{{ stats.get('mes_factures', 0) }}</div>
+        <div class="stat-label">Mes factures</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green">🏪</div>
+      <div>
+        <div class="stat-value">{{ stats.get('mon_code', '—') }}</div>
+        <div class="stat-label">Mon code POS</div>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue">🏪</div>
+      <div>
+        <div class="stat-value">{{ stats.get('magasins_best', 0) }}</div>
+        <div class="stat-label">Magasins BESTMARK</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon afri" style="background:#DBEAFE">🏪</div>
+      <div>
+        <div class="stat-value">{{ stats.get('magasins_afri', 0) }}</div>
+        <div class="stat-label">Magasins AFRINETWORKS</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange">📄</div>
+      <div>
+        <div class="stat-value">{{ stats.get('total_factures', 0) }}</div>
+        <div class="stat-label">Factures générées</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Actions rapides -->
+  <div class="card">
+    <div class="card-header">Actions rapides</div>
+    <div class="card-body" style="display:flex; gap:12px; flex-wrap:wrap;">
+
+      <a href="{{ url_for('factures.index') }}" class="btn btn-primary">
+        📄 {% if current_user.is_fr %}Mes factures{% else %}Voir les factures{% endif %}
+      </a>
+
+      {% if not current_user.is_fr %}
+      <a href="{{ url_for('factures.magasins') }}" class="btn btn-gray">
+        🏪 Gestion magasins
+      </a>
+      {% endif %}
+
+      {% if current_user.is_admin %}
+      <a href="{{ url_for('admin.users') }}" class="btn btn-warning">
+        👥 Gérer les utilisateurs
+      </a>
+      {% endif %}
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

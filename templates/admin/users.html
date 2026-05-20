@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Gestion Utilisateurs{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="page-header" style="display:flex; align-items:center; justify-content:space-between;">
+    <div>
+      <h1>👥 Utilisateurs</h1>
+      <p>{{ users|length }} utilisateur(s)</p>
+    </div>
+    <a href="{{ url_for('admin.create_user') }}" class="btn btn-primary">+ Ajouter</a>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Rôle</th>
+            <th>Société</th>
+            <th>Code POS</th>
+            <th>Statut</th>
+            <th>Dernier login</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td><strong>{{ u.username }}</strong></td>
+            <td style="color:var(--text-m);">{{ u.email or '—' }}</td>
+            <td>
+              <span class="badge-role badge-{{ u.role }}">{{ u.role }}</span>
+            </td>
+            <td>{{ u.societe or '—' }}</td>
+            <td>{{ u.code_magasin or '—' }}</td>
+            <td>
+              {% if u.actif %}
+              <span class="badge badge-success">Actif</span>
+              {% else %}
+              <span class="badge badge-danger">Inactif</span>
+              {% endif %}
+            </td>
+            <td style="font-size:11px; color:var(--text-m);">
+              {{ u.last_login.strftime('%d/%m/%Y %H:%M') if u.last_login else 'Jamais' }}
+            </td>
+            <td style="display:flex; gap:6px; flex-wrap:wrap;">
+              {% if u.username != 'admin' %}
+              <a href="{{ url_for('admin.toggle_user', uid=u.id) }}"
+                 class="btn btn-sm btn-{{ 'danger' if u.actif else 'success' }}">
+                {{ '🔒 Désactiver' if u.actif else '✅ Activer' }}
+              </a>
+              {% endif %}
+
+              <button onclick="document.getElementById('reset-{{ u.id }}').style.display='block'"
+                      class="btn btn-sm btn-warning">🔑 MDP</button>
+
+              <form id="reset-{{ u.id }}" method="POST"
+                    action="{{ url_for('admin.reset_password', uid=u.id) }}"
+                    style="display:none; flex-wrap:wrap; gap:4px;">
+                <input type="password" name="new_password" placeholder="Nouveau MDP"
+                       style="width:140px;" minlength="6" required>
+                <button type="submit" class="btn btn-sm btn-primary">OK</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

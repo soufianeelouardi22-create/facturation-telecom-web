@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Facturation Telecom{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+{% if current_user.is_authenticated %}
+<!-- ── Navbar ──────────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ url_for('main.dashboard') }}">
+    <span class="icon">⬡</span>
+    <div>
+      Facturation Telecom
+      <small>BESTMARK &amp; AFRINETWORKS</small>
+    </div>
+  </a>
+
+  <ul class="navbar-nav">
+    <li>
+      <a href="{{ url_for('main.dashboard') }}"
+         class="{{ 'active' if request.endpoint == 'main.dashboard' }}">
+        🏠 Tableau de bord
+      </a>
+    </li>
+
+    {% if not current_user.is_fr %}
+    <li>
+      <a href="{{ url_for('factures.index') }}"
+         class="{{ 'active' if request.blueprint == 'factures' }}">
+        📄 Factures
+      </a>
+    </li>
+    <li>
+      <a href="{{ url_for('factures.magasins') }}"
+         class="{{ 'active' if request.endpoint == 'factures.magasins' }}">
+        🏪 Magasins
+      </a>
+    </li>
+    {% else %}
+    <li>
+      <a href="{{ url_for('factures.index') }}"
+         class="{{ 'active' if request.blueprint == 'factures' }}">
+        📄 Mes Factures
+      </a>
+    </li>
+    {% endif %}
+
+    {% if current_user.is_admin %}
+    <li>
+      <a href="{{ url_for('admin.users') }}"
+         class="{{ 'active' if request.blueprint == 'admin' }}">
+        ⚙️ Admin
+      </a>
+    </li>
+    {% endif %}
+  </ul>
+
+  <div class="navbar-right">
+    <span class="user-name">{{ current_user.username }}</span>
+    <span class="badge-role badge-{{ current_user.role }}">{{ current_user.role }}</span>
+    <a href="{{ url_for('auth.logout') }}" class="btn btn-gray btn-sm">Déconnexion</a>
+  </div>
+</nav>
+{% endif %}
+
+<!-- ── Flash messages ──────────────────────────────────────────────── -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="container" style="padding-top:16px; padding-bottom:0">
+    {% for cat, msg in messages %}
+    <div class="alert alert-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+<!-- ── Page content ────────────────────────────────────────────────── -->
+{% block content %}{% endblock %}
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

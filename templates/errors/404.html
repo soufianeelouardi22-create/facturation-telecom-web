@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Page introuvable{% endblock %}
+{% block content %}
+<div class="container" style="text-align:center; padding-top:80px;">
+  <div style="font-size:64px;">🔍</div>
+  <h1 style="margin-top:16px; font-size:28px;">404 — Page introuvable</h1>
+  <p style="color:var(--text-m); margin-top:8px;">La page demandée n'existe pas.</p>
+  <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary" style="margin-top:24px;">
+    ← Retour au tableau de bord
+  </a>
+</div>
+{% endblock %}

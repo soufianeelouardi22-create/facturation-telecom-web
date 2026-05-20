@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Facture {{ fact.code_magasin }} — {{ fact.mois_nom }} {{ fact.annee }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:900px;">
+  <div class="page-header">
+    <div>
+      <a href="{{ url_for('factures.index') }}" class="btn btn-gray btn-sm" style="margin-bottom:8px;">← Retour</a>
+      <h1>📄 Facture {{ fact.numero_facture or fact.code_magasin }}</h1>
+      <span style="color:var(--text-m); font-size:14px;">{{ fact.mois_nom }} {{ fact.annee }}</span>
+    </div>
+    {% if fact.fichier_pdf %}
+    <a href="{{ url_for('factures.download', fact_id=fact.id) }}"
+       class="btn btn-success">⬇ Télécharger PDF</a>
+    {% endif %}
+  </div>
+
+  <!-- ── Infos générales ── -->
+  <div class="card" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 16px; font-size:15px; color:var(--text-m); text-transform:uppercase; letter-spacing:.05em;">Informations générales</h3>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px;">
+      {% set d = fact.donnees %}
+      <div>
+        <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; margin-bottom:4px;">Code magasin</div>
+        <div style="font-weight:600;">{{ fact.code_magasin }}</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; margin-bottom:4px;">Nom magasin</div>
+        <div style="font-weight:600;">{{ d.get('nom_magasin', '—') }}</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; margin-bottom:4px;">Société</div>
+        <div>
+          <span class="badge badge-{{ 'best' if fact.societe == 'BESTMARK' else 'afri' }}">{{ fact.societe }}</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; margin-bottom:4px;">N° facture</div>
+        <div>{{ d.get('numero_facture', '—') }}</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; margin-bottom:4px;">Date facture</div>
+        <div>{{ d.get('date_facture', '—') }}</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; margin-bottom:4px;">Échéance</div>
+        <div>{{ d.get('date_echeance', '—') }}</div>
+      </div>
+      {% if d.get('adresse_magasin') %}
+      <div>
+        <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; margin-bottom:4px;">Adresse</div>
+        <div>{{ d.get('adresse_magasin') }}{% if d.get('ville_magasin') %}, {{ d.get('ville_magasin') }}{% endif %}</div>
+      </div>
+      {% endif %}
+      {% if d.get('ice_magasin') %}
+      <div>
+        <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; margin-bottom:4px;">ICE</div>
+        <div>{{ d.get('ice_magasin') }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Lignes de facturation ── -->
+  {% if d.get('lignes') %}
+  <div class="card" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 16px; font-size:15px; color:var(--text-m); text-transform:uppercase; letter-spacing:.05em;">Détail des lignes</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th style="text-align:right;">Quantité</th>
+            <th style="text-align:right;">P.U. HT</th>
+            <th style="text-align:right;">Total HT</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ligne in d.get('lignes', []) %}
+          <tr>
+            <td>{{ ligne.get('description', ligne.get('libelle', '')) }}</td>
+            <td style="text-align:right;">{{ ligne.get('quantite', ligne.get('qte', '')) }}</td>
+            <td style="text-align:right;">{{ "%.2f"|format(ligne.get('prix_unitaire', ligne.get('pu', 0))|float) }}</td>
+            <td style="text-align:right; font-weight:500;">{{ "%.2f"|format(ligne.get('montant', ligne.get('total', 0))|float) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Totaux ── -->
+  <div class="card">
+    <h3 style="margin:0 0 16px; font-size:15px; color:var(--text-m); text-transform:uppercase; letter-spacing:.05em;">Récapitulatif</h3>
+    <div style="max-width:360px; margin-left:auto;">
+      <table style="width:100%;">
+        <tbody>
+          <tr>
+            <td style="padding:6px 0; color:var(--text-m);">Montant HT</td>
+            <td style="text-align:right; padding:6px 0;">{{ "%.2f"|format(d.get('montant_ht', 0)|float) }} MAD</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0; color:var(--text-m);">TVA ({{ d.get('tva_taux', '20') }}%)</td>
+            <td style="text-align:right; padding:6px 0;">{{ "%.2f"|format(d.get('tva', 0)|float) }} MAD</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0; color:var(--text-m);">TTC</td>
+            <td style="text-align:right; padding:6px 0;">{{ "%.2f"|format(d.get('ttc', 0)|float) }} MAD</td>
+          </tr>
+          {% if d.get('ras') %}
+          <tr>
+            <td style="padding:6px 0; color:var(--text-m);">RAS</td>
+            <td style="text-align:right; padding:6px 0; color:#e53e3e;">-{{ "%.2f"|format(d.get('ras', 0)|float) }} MAD</td>
+          </tr>
+          {% endif %}
+          {% if d.get('tva_ras') %}
+          <tr>
+            <td style="padding:6px 0; color:var(--text-m);">TVA RAS ({{ d.get('pourcentage_tva_ras', '') }}%)</td>
+            <td style="text-align:right; padding:6px 0; color:#e53e3e;">-{{ "%.2f"|format(d.get('tva_ras', 0)|float) }} MAD</td>
+          </tr>
+          {% endif %}
+          <tr style="border-top:2px solid var(--border);">
+            <td style="padding:10px 0 6px; font-weight:700; font-size:16px;">NET À PAYER</td>
+            <td style="text-align:right; padding:10px 0 6px; font-weight:700; font-size:18px; color:var(--primary);">
+              {{ "%.2f"|format(d.get('net_a_payer', 0)|float) }} MAD
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      {% if d.get('montant_lettres_complet') %}
+      <p style="font-size:12px; color:var(--text-m); font-style:italic; margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
+        {{ d.get('montant_lettres_complet') }}
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

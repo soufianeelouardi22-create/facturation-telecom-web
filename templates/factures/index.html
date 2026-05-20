@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block title %}Factures{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <h1>📄 {% if current_user.is_fr %}Mes Factures{% else %}Historique Factures{% endif %}</h1>
+    <span class="badge badge-best" style="font-size:13px;">{{ factures|length }} facture{{ 's' if factures|length != 1 }}</span>
+  </div>
+
+  <div class="card">
+    <!-- ── Filtres ── -->
+    {% if not current_user.is_fr %}
+    <form method="GET" class="filters" id="filter-form">
+      <select name="societe" onchange="this.form.submit()">
+        <option value="">Toutes sociétés</option>
+        <option value="BESTMARK"     {{ 'selected' if selected_societe == 'BESTMARK' }}>BESTMARK</option>
+        <option value="AFRINETWORKS" {{ 'selected' if selected_societe == 'AFRINETWORKS' }}>AFRINETWORKS</option>
+      </select>
+
+      <select name="mois" onchange="this.form.submit()">
+        <option value="">Tous mois</option>
+        {% for m in mois_list %}
+        <option value="{{ loop.index }}" {{ 'selected' if selected_mois == loop.index }}>{{ m }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="annee" onchange="this.form.submit()">
+        <option value="">Toutes années</option>
+        {% for y in range(2023, 2031) %}
+        <option value="{{ y }}" {{ 'selected' if selected_annee == y }}>{{ y }}</option>
+        {% endfor %}
+      </select>
+
+      <input type="text" name="code" placeholder="Code / Nom magasin…"
+             value="{{ selected_code }}" style="width:180px;"
+             oninput="clearTimeout(window._ct); window._ct=setTimeout(()=>this.form.submit(),600)">
+
+      <button type="submit" class="btn btn-primary btn-sm">Filtrer</button>
+      <a href="{{ url_for('factures.index') }}" class="btn btn-gray btn-sm">Réinitialiser</a>
+    </form>
+    {% endif %}
+
+    <!-- ── Tableau ── -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Nom magasin</th>
+            <th>Mois</th>
+            <th>Année</th>
+            <th>Société</th>
+            <th style="text-align:right;">NET À PAYER</th>
+            <th style="text-align:center;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in factures %}
+          <tr>
+            <td><strong>{{ f.code_magasin }}</strong></td>
+            <td>{{ f.nom_magasin or '—' }}</td>
+            <td>{{ f.mois_nom }}</td>
+            <td>{{ f.annee }}</td>
+            <td>
+              <span class="badge badge-{{ 'best' if f.societe == 'BESTMARK' else 'afri' }}">
+                {{ f.societe }}
+              </span>
+            </td>
+            <td style="text-align:right; font-weight:600; white-space:nowrap;">
+              {% if f.net_a_payer %}
+                {{ "%.2f"|format(f.net_a_payer|float) }} MAD
+              {% else %}—{% endif %}
+            </td>
+            <td style="text-align:center; white-space:nowrap;">
+              <a href="{{ url_for('factures.detail', fact_id=f.id) }}"
+                 class="btn btn-primary btn-sm">Détails</a>
+              {% if f.fichier_pdf %}
+              <a href="{{ url_for('factures.download', fact_id=f.id) }}"
+                 class="btn btn-success btn-sm">⬇ PDF</a>
+              {% else %}
+              <span class="btn btn-gray btn-sm" style="opacity:.5; cursor:default;">PDF</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" style="text-align:center; color:var(--text-l); padding:32px;">
+              Aucune facture trouvée.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

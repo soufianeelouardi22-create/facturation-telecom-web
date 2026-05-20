@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}PDF non disponible{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:600px; text-align:center; padding-top:60px;">
+
+  <div style="font-size:64px; margin-bottom:16px;">📂</div>
+
+  <h2 style="font-size:22px; font-weight:700; margin-bottom:8px;">PDF non disponible sur ce serveur</h2>
+
+  <p style="color:var(--text-m); font-size:14px; max-width:440px; margin:0 auto 24px;">
+    Le fichier PDF de cette facture a été généré par l'application desktop et est stocké
+    localement sur la machine qui l'a produit. Il n'est pas accessible depuis le serveur web.
+  </p>
+
+  <div class="card" style="text-align:left; padding:20px; margin-bottom:24px; display:inline-block; min-width:320px;">
+    <div style="font-size:12px; color:var(--text-l); text-transform:uppercase; margin-bottom:12px; letter-spacing:.05em;">Informations de la facture</div>
+    <div style="display:grid; grid-template-columns:auto 1fr; gap:6px 16px; font-size:13px;">
+      <span style="color:var(--text-m);">Code</span>      <strong>{{ fact.code_magasin }}</strong>
+      <span style="color:var(--text-m);">Magasin</span>  <span>{{ fact.nom_magasin or '—' }}</span>
+      <span style="color:var(--text-m);">Période</span>  <span>{{ fact.mois_nom }} {{ fact.annee }}</span>
+      <span style="color:var(--text-m);">Société</span>
+      <span>
+        <span class="badge badge-{{ 'best' if fact.societe == 'BESTMARK' else 'afri' }}">{{ fact.societe }}</span>
+      </span>
+      {% if fact.donnees.get('fichier_pdf') %}
+      <span style="color:var(--text-m);">Chemin</span>
+      <span style="font-family:monospace; font-size:11px; color:var(--text-l); word-break:break-all;">
+        {{ fact.donnees.get('fichier_pdf') }}
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex; gap:12px; justify-content:center;">
+    <a href="{{ url_for('factures.detail', fact_id=fact.id) }}" class="btn btn-primary">Voir les détails</a>
+    <a href="{{ url_for('factures.index') }}" class="btn btn-gray">← Retour aux factures</a>
+  </div>
+
+</div>
+{% endblock %}
