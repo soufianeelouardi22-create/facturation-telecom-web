@@ -2,65 +2,80 @@
 {% block title %}{{ action }} Utilisateur{% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container" style="max-width:560px;">
   <div class="page-header">
     <h1>👤 {{ action }} Utilisateur</h1>
   </div>
 
-  <div class="card" style="max-width:500px;">
-    <div class="card-body">
-      <form method="POST">
+  <div class="card">
+    <div class="card-body" style="padding:24px;">
+      <form method="POST" id="user-form">
 
+        <!-- Username -->
         <div class="form-group">
-          <label>Username *</label>
-          <input type="text" name="username" value="{{ user.username if user }}"
+          <label>Username <span style="color:#e53e3e;">*</span></label>
+          <input type="text" name="username" value="{{ user.username if user else '' }}"
                  required autofocus placeholder="ex: agent01">
         </div>
 
+        <!-- Password -->
         <div class="form-group">
-          <label>Email</label>
-          <input type="email" name="email" value="{{ user.email if user }}"
-                 placeholder="optionnel">
+          <label>Mot de passe <span style="color:#e53e3e;">*</span></label>
+          <input type="password" name="password" required
+                 placeholder="Minimum 6 caractères" minlength="6">
         </div>
 
+        <!-- Rôle -->
         <div class="form-group">
-          <label>Mot de passe {{ '' if user else '*' }}</label>
-          <input type="password" name="password"
-                 {{ '' if user else 'required' }}
-                 placeholder="{{ 'Laisser vide pour conserver' if user else 'Minimum 6 caractères' }}"
-                 minlength="6">
-        </div>
-
-        <div class="form-group">
-          <label>Rôle *</label>
-          <select name="role" onchange="toggleFields(this.value)">
+          <label>Rôle <span style="color:#e53e3e;">*</span></label>
+          <select name="role" id="role-select" onchange="onRoleChange(this.value)">
             {% for r in roles %}
             <option value="{{ r }}" {{ 'selected' if user and user.role == r }}>{{ r }}</option>
             {% endfor %}
           </select>
           <small style="color:var(--text-m); font-size:11px; margin-top:4px; display:block;">
-            admin = accès total · agent = gestion + génération · fr = lecture seule de ses factures
+            admin = accès total &nbsp;·&nbsp; agent = gestion + génération &nbsp;·&nbsp; fr = lecture seule (ses factures)
           </small>
         </div>
 
+        <!-- ── Champs AGENT ── -->
+        <div id="agent-fields" style="display:none;">
+          <div class="form-group">
+            <label>Société</label>
+            <select name="societe" id="agent-societe">
+              <option value=""          {{ 'selected' if user and not user.societe }}>Les deux (BESTMARK + AFRINETWORKS)</option>
+              <option value="BESTMARK"     {{ 'selected' if user and user.societe == 'BESTMARK' }}>BESTMARK uniquement</option>
+              <option value="AFRINETWORKS" {{ 'selected' if user and user.societe == 'AFRINETWORKS' }}>AFRINETWORKS uniquement</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- ── Champs FR ── -->
         <div id="fr-fields" style="display:none;">
           <div class="form-group">
-            <label>Société (pour rôle FR)</label>
-            <select name="societe">
-              <option value="">—</option>
+            <label>Société du magasin <span style="color:#e53e3e;">*</span></label>
+            <select name="fr_societe" id="fr-societe" onchange="filterMagasins(this.value)">
+              <option value="">— Choisir une société —</option>
               <option value="BESTMARK"     {{ 'selected' if user and user.societe == 'BESTMARK' }}>BESTMARK</option>
               <option value="AFRINETWORKS" {{ 'selected' if user and user.societe == 'AFRINETWORKS' }}>AFRINETWORKS</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Code POS (pour rôle FR)</label>
-            <input type="text" name="code_magasin"
-                   value="{{ user.code_magasin if user }}"
-                   placeholder="ex: 1355">
+            <label>Code magasin <span style="color:#e53e3e;">*</span></label>
+            <select name="code_magasin" id="code-magasin-select">
+              <option value="">— Choisir d'abord une société —</option>
+              {% for m in magasins %}
+              <option value="{{ m.code }}"
+                      data-societe="{{ m.societe }}"
+                      {{ 'selected' if user and user.code_magasin == m.code }}>
+                {{ m.code }} — {{ m.nom }} ({{ m.societe }})
+              </option>
+              {% endfor %}
+            </select>
           </div>
         </div>
 
-        <div style="display:flex; gap:10px; margin-top:20px;">
+        <div style="display:flex; gap:10px; margin-top:24px;">
           <button type="submit" class="btn btn-primary">{{ action }}</button>
           <a href="{{ url_for('admin.users') }}" class="btn btn-gray">Annuler</a>
         </div>
@@ -72,10 +87,53 @@
 
 {% block scripts %}
 <script>
-function toggleFields(role) {
-  document.getElementById('fr-fields').style.display = role === 'fr' ? 'block' : 'none';
-}
-toggleFields(document.querySelector('[name=role]').value);
+  // Données magasins pour le filtre JS
+  const allOptions = Array.from(document.querySelectorAll('#code-magasin-select option[data-societe]'));
+
+  function filterMagasins(societe) {
+    const sel = document.getElementById('code-magasin-select');
+    const current = sel.value;
+    // Vider et reconstruire
+    sel.innerHTML = '<option value="">— Choisir un magasin —</option>';
+    allOptions.forEach(opt => {
+      if (!societe || opt.dataset.societe === societe) {
+        sel.appendChild(opt.cloneNode(true));
+      }
+    });
+    sel.value = current;
+  }
+
+  function onRoleChange(role) {
+    document.getElementById('agent-fields').style.display = role === 'agent' ? 'block' : 'none';
+    document.getElementById('fr-fields').style.display    = role === 'fr'    ? 'block' : 'none';
+
+    // Sync société hidden field pour le POST
+    const agentSoc = document.getElementById('agent-societe');
+    const frSoc    = document.getElementById('fr-societe');
+    if (role === 'fr' && frSoc.value) filterMagasins(frSoc.value);
+  }
+
+  // Form submit : copier fr_societe → societe pour le POST
+  document.getElementById('user-form').addEventListener('submit', function() {
+    const role = document.getElementById('role-select').value;
+    if (role === 'fr') {
+      // Remplacer la valeur du select agent-societe par celle du fr-societe
+      document.getElementById('agent-societe').name = '';
+      const frSoc = document.getElementById('fr-societe').value;
+      // Créer un input hidden societe avec la valeur fr
+      const h = document.createElement('input');
+      h.type  = 'hidden';
+      h.name  = 'societe';
+      h.value = frSoc;
+      this.appendChild(h);
+    }
+  });
+
+  // Init au chargement
+  onRoleChange(document.getElementById('role-select').value);
+  {% if user and user.societe %}
+  filterMagasins('{{ user.societe }}');
+  {% endif %}
 </script>
 {% endblock %}
 {% endblock %}

@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="container">
-  <div class="page-header" style="display:flex; align-items:center; justify-content:space-between;">
+  <div class="page-header">
     <div>
       <h1>👥 Utilisateurs</h1>
       <p>{{ users|length }} utilisateur(s)</p>
@@ -17,53 +17,82 @@
         <thead>
           <tr>
             <th>Username</th>
-            <th>Email</th>
             <th>Rôle</th>
             <th>Société</th>
-            <th>Code POS</th>
+            <th>Code magasin</th>
             <th>Statut</th>
             <th>Dernier login</th>
-            <th>Actions</th>
+            <th style="text-align:center;">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for u in users %}
           <tr>
             <td><strong>{{ u.username }}</strong></td>
-            <td style="color:var(--text-m);">{{ u.email or '—' }}</td>
+            <td><span class="badge-role badge-{{ u.role }}">{{ u.role }}</span></td>
             <td>
-              <span class="badge-role badge-{{ u.role }}">{{ u.role }}</span>
+              {% if u.societe %}
+                <span class="badge badge-{{ 'best' if u.societe == 'BESTMARK' else 'afri' }}">{{ u.societe }}</span>
+              {% elif u.role == 'agent' %}
+                <span style="color:var(--text-m); font-size:12px;">Les deux</span>
+              {% else %}
+                <span style="color:var(--text-l);">—</span>
+              {% endif %}
             </td>
-            <td>{{ u.societe or '—' }}</td>
-            <td>{{ u.code_magasin or '—' }}</td>
+            <td>
+              {% if u.code_magasin %}
+                <code style="background:var(--bg); padding:2px 6px; border-radius:4px; font-size:12px;">{{ u.code_magasin }}</code>
+              {% else %}—{% endif %}
+            </td>
             <td>
               {% if u.actif %}
-              <span class="badge badge-success">Actif</span>
+                <span class="badge badge-success">Actif</span>
               {% else %}
-              <span class="badge badge-danger">Inactif</span>
+                <span class="badge badge-danger">Inactif</span>
               {% endif %}
             </td>
             <td style="font-size:11px; color:var(--text-m);">
               {{ u.last_login.strftime('%d/%m/%Y %H:%M') if u.last_login else 'Jamais' }}
             </td>
-            <td style="display:flex; gap:6px; flex-wrap:wrap;">
-              {% if u.username != 'admin' %}
-              <a href="{{ url_for('admin.toggle_user', uid=u.id) }}"
-                 class="btn btn-sm btn-{{ 'danger' if u.actif else 'success' }}">
-                {{ '🔒 Désactiver' if u.actif else '✅ Activer' }}
-              </a>
-              {% endif %}
+            <td>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">
 
-              <button onclick="document.getElementById('reset-{{ u.id }}').style.display='block'"
-                      class="btn btn-sm btn-warning">🔑 MDP</button>
+                {% if u.username != 'admin' %}
+                <!-- Toggle actif -->
+                <a href="{{ url_for('admin.toggle_user', uid=u.id) }}"
+                   class="btn btn-sm btn-{{ 'warning' if u.actif else 'success' }}"
+                   title="{{ 'Désactiver' if u.actif else 'Activer' }}">
+                  {{ '🔒' if u.actif else '✅' }}
+                </a>
+                {% endif %}
 
-              <form id="reset-{{ u.id }}" method="POST"
-                    action="{{ url_for('admin.reset_password', uid=u.id) }}"
-                    style="display:none; flex-wrap:wrap; gap:4px;">
-                <input type="password" name="new_password" placeholder="Nouveau MDP"
-                       style="width:140px;" minlength="6" required>
-                <button type="submit" class="btn btn-sm btn-primary">OK</button>
-              </form>
+                <!-- Reset MDP -->
+                <button onclick="toggleReset({{ u.id }})"
+                        class="btn btn-sm btn-gray" title="Réinitialiser mot de passe">🔑</button>
+
+                {% if u.username != 'admin' and u.id != current_user.id %}
+                <!-- Supprimer -->
+                <button onclick="confirmDelete({{ u.id }}, '{{ u.username }}')"
+                        class="btn btn-sm btn-danger" title="Supprimer">🗑</button>
+                {% endif %}
+
+                <!-- Formulaire reset MDP (inline caché) -->
+                <form id="reset-{{ u.id }}" method="POST"
+                      action="{{ url_for('admin.reset_password', uid=u.id) }}"
+                      style="display:none; gap:4px; align-items:center; flex-wrap:wrap;">
+                  <input type="password" name="new_password" placeholder="Nouveau MDP"
+                         style="width:130px;" minlength="6" required>
+                  <button type="submit" class="btn btn-sm btn-primary">OK</button>
+                  <button type="button" onclick="toggleReset({{ u.id }})"
+                          class="btn btn-sm btn-gray">✕</button>
+                </form>
+
+                <!-- Formulaire suppression (hidden) -->
+                <form id="delete-{{ u.id }}" method="POST"
+                      action="{{ url_for('admin.delete_user', uid=u.id) }}"
+                      style="display:none;"></form>
+
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -72,4 +101,18 @@
     </div>
   </div>
 </div>
+
+{% block scripts %}
+<script>
+function toggleReset(uid) {
+  const f = document.getElementById('reset-' + uid);
+  f.style.display = f.style.display === 'flex' ? 'none' : 'flex';
+}
+function confirmDelete(uid, username) {
+  if (confirm('Supprimer l\'utilisateur "' + username + '" ? Cette action est irréversible.')) {
+    document.getElementById('delete-' + uid).submit();
+  }
+}
+</script>
+{% endblock %}
 {% endblock %}
