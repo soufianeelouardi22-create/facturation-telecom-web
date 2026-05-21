@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import sqlite3
@@ -127,6 +128,39 @@ def download(fact_id):
 
     return send_file(pdf_path, as_attachment=True,
                      download_name=os.path.basename(pdf_path))
+
+
+@factures_bp.route('/<int:fact_id>/pdf')
+@login_required
+def pdf(fact_id):
+    fact = _get_facture_by_id(fact_id)
+    if not fact:
+        abort(404)
+    if current_user.is_fr and fact.get('code_magasin') != current_user.code_magasin:
+        abort(403)
+
+    try:
+        donnees = json.loads(fact.get('donnees_json') or '{}')
+    except Exception:
+        donnees = {}
+
+    if not donnees.get('mois_nom'):
+        mois_list = current_app.config['SETTINGS'].get('mois', [])
+        m = fact.get('mois')
+        donnees['mois_nom'] = mois_list[m - 1] if m and 1 <= m <= len(mois_list) else str(m or '')
+
+    from pdf_web import generate_pdf
+    pdf_bytes = generate_pdf(donnees)
+
+    num = donnees.get('numero_facture') or fact_id
+    filename = f"facture_{num}.pdf"
+
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=filename,
+    )
 
 
 @factures_bp.route('/mon-espace')
