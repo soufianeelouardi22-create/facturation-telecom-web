@@ -1,21 +1,19 @@
 """
-sync_db.py — Synchronise les tables métier depuis la DB desktop vers la DB web.
+sync_db.py — Synchronise les tables métier depuis la DB desktop vers la DB web,
+             puis upload vers PythonAnywhere et recharge l'app.
 
 Usage :
-    python sync_db.py
-    python sync_db.py --src /chemin/vers/database.db --dst /chemin/vers/database_web.db
-
-Tables copiées  : magasins, factures, types_magasins
-Tables ignorées : web_users (gérée exclusivement par Flask-SQLAlchemy)
+    python sync_db.py                            # sync locale uniquement
+    python sync_db.py --src /chemin/database.db  # source custom
+    python sync_db.py --upload                   # sync + upload PythonAnywhere
 """
 
 import sqlite3
 import os
-import shutil
 import argparse
 from datetime import datetime
 
-BASE_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+BASE_DIR    = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DEFAULT_SRC = os.environ.get(
     'DATABASE_PATH',
     os.path.join(BASE_DIR, 'config', 'database.db')
@@ -26,6 +24,14 @@ DEFAULT_DST = os.environ.get(
 )
 
 TABLES_TO_SYNC = ('magasins', 'factures', 'types_magasins')
+
+# ── PythonAnywhere ──────────────────────────────────────────────────────────
+PA_USERNAME = 'soufianeelouardi'
+PA_TOKEN    = '882c64f647961f73bfca9a7325851b23235466e3'
+PA_BASE     = f'https://www.pythonanywhere.com/api/v0/user/{PA_USERNAME}'
+PA_FILE_URL = (f'{PA_BASE}/files/path/home/{PA_USERNAME}/'
+               'facturation-telecom-web/config/database_web.db')
+PA_RELOAD_URL = f'{PA_BASE}/webapps/{PA_USERNAME}.pythonanywhere.com/reload/'
 
 
 def get_create_sql(src_con, table):
@@ -40,7 +46,6 @@ def sync(src_path=DEFAULT_SRC, dst_path=DEFAULT_DST, verbose=True):
         if verbose:
             print(msg)
 
-    # Vérifications
     if not os.path.exists(src_path):
         raise FileNotFoundError(f'DB source introuvable : {src_path}')
 
@@ -58,17 +63,14 @@ def sync(src_path=DEFAULT_SRC, dst_path=DEFAULT_DST, verbose=True):
     total_rows = 0
 
     for table in TABLES_TO_SYNC:
-        # Récupérer le CREATE TABLE depuis la source
         create_sql = get_create_sql(src, table)
         if not create_sql:
             log(f'  [SKIP] {table} — table absente dans la source')
             continue
 
-        # Recréer la table dans la destination (DROP + CREATE pour rester en sync)
         dst.execute(f'DROP TABLE IF EXISTS {table}')
         dst.execute(create_sql)
 
-        # Copier toutes les lignes
         rows = src.execute(f'SELECT * FROM {table}').fetchall()
         if rows:
             placeholders = ', '.join(['?'] * len(rows[0]))
@@ -81,7 +83,6 @@ def sync(src_path=DEFAULT_SRC, dst_path=DEFAULT_DST, verbose=True):
         log(f'  [OK] {table:25s} {len(rows):>6} lignes copiées')
         total_rows += len(rows)
 
-    # S'assurer que web_users existe dans la destination (sans la toucher si elle existe déjà)
     dst.execute('''
         CREATE TABLE IF NOT EXISTS web_users (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,14 +107,94 @@ def sync(src_path=DEFAULT_SRC, dst_path=DEFAULT_DST, verbose=True):
     return total_rows
 
 
+def upload_to_pythonanywhere(dst_path=DEFAULT_DST, verbose=True):
+    """Sync locale → upload database_web.db → reload webapp PythonAnywhere."""
+    def log(msg):
+        if verbose:
+            print(msg)
+
+    import urllib.request
+    import urllib.error
+
+    headers = {'Authorization': f'Token {PA_TOKEN}'}
+
+    # ── 1. Sync locale ──────────────────────────────────────────────
+    sync(dst_path=dst_path, verbose=verbose)
+
+    # ── 2. Upload du fichier (multipart/form-data) ──────────────────
+    log(f'[upload] Envoi vers PythonAnywhere...')
+    log(f'  URL : {PA_FILE_URL}')
+
+    with open(dst_path, 'rb') as f:
+        file_data = f.read()
+
+    # Construire le corps multipart manuellement
+    boundary = b'----PASyncBoundary'
+    filename = os.path.basename(dst_path).encode()
+    body = (
+        b'--' + boundary + b'\r\n'
+        b'Content-Disposition: form-data; name="content"; filename="' + filename + b'"\r\n'
+        b'Content-Type: application/octet-stream\r\n\r\n'
+        + file_data + b'\r\n'
+        b'--' + boundary + b'--\r\n'
+    )
+
+    req = urllib.request.Request(
+        PA_FILE_URL,
+        data=body,
+        headers={
+            **headers,
+            'Content-Type': f'multipart/form-data; boundary={boundary.decode()}',
+        },
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            status = resp.status
+    except urllib.error.HTTPError as e:
+        if e.code not in (200, 201):
+            log(f'  [ERREUR] Upload échoué : HTTP {e.code} — {e.read().decode()}')
+            return False
+        status = e.code
+
+    log(f'  [OK] Fichier uploadé (HTTP {status})')
+
+    # ── 3. Reload webapp ────────────────────────────────────────────
+    log(f'[reload] Rechargement de {PA_USERNAME}.pythonanywhere.com...')
+
+    req = urllib.request.Request(
+        PA_RELOAD_URL,
+        data=b'',
+        headers=headers,
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            reload_status = resp.status
+    except urllib.error.HTTPError as e:
+        if e.code not in (200, 201):
+            log(f'  [ERREUR] Reload échoué : HTTP {e.code} — {e.read().decode()}')
+            return False
+        reload_status = e.code
+
+    log(f'  [OK] Webapp rechargée (HTTP {reload_status})')
+    log('\n  Sync terminee\n')
+    return True
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Sync desktop DB → web DB')
-    parser.add_argument('--src', default=DEFAULT_SRC, help='Chemin DB source (desktop)')
-    parser.add_argument('--dst', default=DEFAULT_DST, help='Chemin DB destination (web)')
+    parser = argparse.ArgumentParser(description='Sync desktop DB -> web DB (+ PythonAnywhere)')
+    parser.add_argument('--src',    default=DEFAULT_SRC,  help='Chemin DB source (desktop)')
+    parser.add_argument('--dst',    default=DEFAULT_DST,  help='Chemin DB destination (web)')
+    parser.add_argument('--upload', action='store_true',  help='Upload vers PythonAnywhere après sync')
     args = parser.parse_args()
 
     try:
-        sync(src_path=args.src, dst_path=args.dst)
+        if args.upload:
+            ok = upload_to_pythonanywhere(dst_path=args.dst)
+            raise SystemExit(0 if ok else 1)
+        else:
+            sync(src_path=args.src, dst_path=args.dst)
     except FileNotFoundError as e:
         print(f'[ERREUR] {e}')
         raise SystemExit(1)
