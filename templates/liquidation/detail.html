@@ -8,18 +8,18 @@
   <div class="page-header">
     <div>
       <h1>
-        📊 Liquidation — {{ mois_nom }} {{ row.annee }}
+        📊 {{ mois_nom }} {{ row.annee }}
         <span class="badge badge-{{ 'best' if row.societe == 'BESTMARK' else 'afri' }}"
               style="font-size:13px; vertical-align:middle;">{{ row.societe }}</span>
       </h1>
       <p style="color:var(--text-m);">
         {{ row.nb_codes }} codes &nbsp;·&nbsp;
         Total : <strong>{{ "%.2f"|format(total_global) }} MAD</strong>
-        &nbsp;·&nbsp; Importé le {{ row.created_at[:10] if row.created_at else '?' }}
+        &nbsp;·&nbsp; Calculé le {{ row.created_at[:10] if row.created_at else '?' }}
         par <em>{{ row.created_by or '?' }}</em>
       </p>
     </div>
-    <div style="display:flex; gap:8px;">
+    <div style="display:flex; gap:8px; align-items:center;">
       <a href="{{ url_for('liquidation.export', mois=row.mois, annee=row.annee, societe=row.societe) }}"
          class="btn btn-success">⬇ Export Excel</a>
       <a href="{{ url_for('liquidation.index') }}" class="btn btn-gray btn-sm">← Retour</a>
@@ -28,19 +28,17 @@
 
   <!-- ── Tableau des primes ── -->
   <div class="card">
-    <div class="card-header">
-      Détail par code POS
-    </div>
+    <div class="card-header">Détail par code POS</div>
     <div class="table-wrap" style="overflow-x:auto;">
-      <table style="min-width:1400px;">
+      <table style="min-width:1200px; font-size:13px;">
         <thead>
-          <tr>
-            <th style="position:sticky; left:0; background:#1E3A5F; color:#fff; z-index:2;">Code</th>
-            <th style="position:sticky; left:60px; background:#1E3A5F; color:#fff; z-index:2; min-width:160px;">Nom Magasin</th>
+          <tr style="background:#1E3A5F; color:#fff;">
+            <th style="position:sticky; left:0; background:#1E3A5F; z-index:2; min-width:70px;">Code</th>
+            <th style="position:sticky; left:70px; background:#1E3A5F; z-index:2; min-width:150px;">Nom Magasin</th>
             {% for _, label in colonnes %}
-            <th style="text-align:right; white-space:nowrap;">{{ label }}</th>
+            <th style="text-align:right; white-space:nowrap; padding:8px 10px;">{{ label }}</th>
             {% endfor %}
-            <th style="text-align:right; white-space:nowrap; background:#EFF6FF; color:#1E40AF; font-weight:700;">TOTAL</th>
+            <th style="text-align:right; white-space:nowrap; background:#1E40AF; min-width:100px;">TOTAL</th>
           </tr>
         </thead>
         <tbody>
@@ -50,13 +48,16 @@
             <td style="position:sticky; left:0; background:#fff; z-index:1; font-weight:600;">
               {{ ligne.code }}
             </td>
-            <td style="position:sticky; left:60px; background:#fff; z-index:1; color:var(--text-m);">
+            <td style="position:sticky; left:70px; background:#fff; z-index:1; color:var(--text-m);">
               {{ ligne.nom or '—' }}
             </td>
+
             {% for champ, _ in colonnes %}
-              {% set val = p.get(champ, 0)|float %}
-              <td style="text-align:right;
-                         {% if val < 0 %}color:#dc2626;{% elif val > 0 %}color:#16a34a;{% else %}color:var(--text-l);{% endif %}">
+              {% set val = (p.get(champ) or 0)|float %}
+              <td style="text-align:right; padding:6px 10px;
+                         {% if val < 0 %}color:#dc2626;
+                         {% elif val == 0 %}color:var(--text-l);
+                         {% endif %}">
                 {% if champ == 'qte_inscription' %}
                   {{ val|int if val else '—' }}
                 {% elif val %}
@@ -66,7 +67,8 @@
                 {% endif %}
               </td>
             {% endfor %}
-            <td style="text-align:right; font-weight:700;
+
+            <td style="text-align:right; font-weight:700; padding:6px 10px;
                        {% if ligne.total < 0 %}color:#dc2626;{% else %}color:#1E40AF;{% endif %}">
               {{ "%.2f"|format(ligne.total) }}
             </td>
@@ -75,26 +77,33 @@
           <tr>
             <td colspan="{{ colonnes|length + 3 }}"
                 style="text-align:center; color:var(--text-l); padding:40px;">
-              Aucune donnée.
+              Aucune donnée calculée.
             </td>
           </tr>
           {% endfor %}
         </tbody>
+
         {% if lignes %}
         <tfoot>
-          <tr style="background:#F0F4FF; font-weight:700;">
-            <td style="position:sticky; left:0; background:#F0F4FF; z-index:1;">TOTAL</td>
-            <td style="position:sticky; left:60px; background:#F0F4FF; z-index:1;">{{ lignes|length }} codes</td>
-            {% for champ, _ in colonnes %}
-            <td style="text-align:right;">
-              {% if champ == 'qte_inscription' %}
-                {{ lignes|map(attribute='primes')|map(attribute=champ, default=0)|map('float')|sum|int }}
-              {% else %}
-                {{ "%.2f"|format(lignes|map(attribute='primes')|map(attribute=champ, default=0)|map('float')|sum) }}
-              {% endif %}
+          <tr style="background:#EFF6FF; font-weight:700; color:#1E40AF;">
+            <td style="position:sticky; left:0; background:#EFF6FF; z-index:1; padding:8px 10px;">
+              TOTAL
             </td>
+            <td style="position:sticky; left:70px; background:#EFF6FF; z-index:1; padding:8px 10px;">
+              {{ lignes|length }} codes
+            </td>
+            {% for champ, _ in colonnes %}
+              {% set t = col_totals.get(champ, 0)|float %}
+              <td style="text-align:right; padding:8px 10px;
+                         {% if t < 0 %}color:#dc2626;{% endif %}">
+                {% if champ == 'qte_inscription' %}
+                  {{ t|int }}
+                {% else %}
+                  {{ "%.2f"|format(t) }}
+                {% endif %}
+              </td>
             {% endfor %}
-            <td style="text-align:right; color:#1E40AF;">
+            <td style="text-align:right; padding:8px 10px;">
               {{ "%.2f"|format(total_global) }}
             </td>
           </tr>
