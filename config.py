@@ -2,7 +2,7 @@ import os
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-_default_db       = os.path.join(BASE_DIR, 'config', 'database.db')
+_default_db       = os.path.join(os.path.dirname(__file__), 'config', 'database_web.db')
 _default_settings = os.path.join(BASE_DIR, 'config', 'settings.json')
 
 class Config:

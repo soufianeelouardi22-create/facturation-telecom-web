@@ -70,8 +70,8 @@ def create_app(env='default'):
 
 
 def _creer_admin_defaut():
-    """Crée admin par défaut si aucun utilisateur n'existe."""
-    if User.query.count() == 0:
+    """Crée admin par défaut s'il n'existe pas encore."""
+    if not User.query.filter_by(username='admin').first():
         admin = User(
             username='admin',
             email='admin@facturation.local',
