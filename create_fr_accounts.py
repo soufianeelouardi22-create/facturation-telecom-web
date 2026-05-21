@@ -44,7 +44,7 @@ def ensure_column(con, table, column, col_type='INTEGER', default='0'):
         print(f'  [DB] Colonne "{column}" ajoutée à {table}.')
 
 
-def run(db_path=DEFAULT_DB, out_path=DEFAULT_OUT):
+def run(db_path=DEFAULT_DB, out_path=DEFAULT_OUT, reset_passwords=False):
     if not os.path.exists(db_path):
         raise FileNotFoundError(f'Base de données introuvable : {db_path}')
 
@@ -64,24 +64,40 @@ def run(db_path=DEFAULT_DB, out_path=DEFAULT_OUT):
     print(f'  Export  : {out_path}')
     print(f'  Magasins: {len(magasins)}\n')
 
-    rapport = []   # [(code, nom, societe, username, password, statut)]
-    crees   = 0
-    ignores = 0
+    mode = 'RESET PASSWORDS' if reset_passwords else 'CRÉATION'
+    print(f'  Mode    : {mode}\n')
+
+    rapport       = []   # [(code, nom, societe, username, password, statut)]
+    crees         = 0
+    resets        = 0
+    ignores       = 0
 
     for mag in magasins:
-        code    = str(mag['code'])
-        nom     = mag['nom'] or ''
-        societe = mag['societe'] or ''
+        code     = str(mag['code'])
+        nom      = mag['nom'] or ''
+        societe  = mag['societe'] or ''
         username = f'pos-{code}'
 
         existing = con.execute(
-            'SELECT id, password_hash FROM web_users WHERE username = ?', (username,)
+            'SELECT id FROM web_users WHERE username = ?', (username,)
         ).fetchone()
 
-        if existing:
-            # Compte existant — on l'inclut dans le rapport sans mot de passe en clair
+        if existing and reset_passwords:
+            password = gen_password()
+            ph = generate_password_hash(password)
+            con.execute(
+                '''UPDATE web_users
+                   SET password_hash = ?, must_change_password = 1
+                   WHERE username = ?''',
+                (ph, username)
+            )
+            rapport.append((code, nom, societe, username, password, 'reset'))
+            resets += 1
+
+        elif existing:
             rapport.append((code, nom, societe, username, '(déjà existant)', 'existant'))
             ignores += 1
+
         else:
             password = gen_password()
             ph = generate_password_hash(password)
@@ -99,8 +115,12 @@ def run(db_path=DEFAULT_DB, out_path=DEFAULT_OUT):
     con.commit()
     con.close()
 
-    print(f'  Créés   : {crees}')
-    print(f'  Ignorés : {ignores} (comptes déjà existants)')
+    if reset_passwords:
+        print(f'  Réinitialisés : {resets}')
+        print(f'  Nouveaux      : {crees}')
+    else:
+        print(f'  Créés   : {crees}')
+        print(f'  Ignorés : {ignores} (comptes déjà existants)')
 
     # ── Export Excel ────────────────────────────────────────────────
     try:
@@ -138,25 +158,30 @@ def run(db_path=DEFAULT_DB, out_path=DEFAULT_OUT):
     ws.column_dimensions['E'].width = 18
     ws.column_dimensions['F'].width = 12
 
-    # Couleurs sociétés
-    fill_best = PatternFill('solid', fgColor='DBEAFE')
-    fill_afri = PatternFill('solid', fgColor='D1FAE5')
-    fill_new  = PatternFill('solid', fgColor='FEF9C3')
-    fill_exist = PatternFill('solid', fgColor='F3F4F6')
+    # Couleurs par statut / société
+    fill_best  = PatternFill('solid', fgColor='DBEAFE')   # bleu clair  — BESTMARK
+    fill_afri  = PatternFill('solid', fgColor='D1FAE5')   # vert clair  — AFRINETWORKS
+    fill_mdp   = PatternFill('solid', fgColor='FEF9C3')   # jaune       — cellule mot de passe
+    fill_exist = PatternFill('solid', fgColor='F3F4F6')   # gris        — non modifié
+    fill_reset = PatternFill('solid', fgColor='FEE2E2')   # rouge clair — mot de passe réinitialisé
 
     for row_idx, (code, nom, societe, username, password, statut) in enumerate(rapport, 2):
         ws.row_dimensions[row_idx].height = 18
         values = [code, nom, societe, username, password, statut]
-        row_fill = fill_best if societe == 'BESTMARK' else fill_afri
+
         if statut == 'existant':
             row_fill = fill_exist
+        elif societe == 'BESTMARK':
+            row_fill = fill_best
+        else:
+            row_fill = fill_afri
 
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row_idx, column=col, value=val)
             cell.border    = border
             cell.alignment = Alignment(vertical='center')
-            if statut == 'créé':
-                cell.fill = fill_new if col == 5 else row_fill
+            if col == 5 and statut in ('créé', 'reset'):
+                cell.fill = fill_reset if statut == 'reset' else fill_mdp
             else:
                 cell.fill = row_fill
 
@@ -173,10 +198,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Crée les comptes FR POS')
     parser.add_argument('--db',  default=DEFAULT_DB,  help='Chemin database_web.db')
     parser.add_argument('--out', default=DEFAULT_OUT, help='Chemin fichier Excel de sortie')
+    parser.add_argument('--reset-passwords', action='store_true',
+                        help='Régénère les mots de passe de tous les comptes existants')
     args = parser.parse_args()
 
     try:
-        run(db_path=args.db, out_path=args.out)
+        run(db_path=args.db, out_path=args.out, reset_passwords=args.reset_passwords)
     except FileNotFoundError as e:
         print(f'[ERREUR] {e}')
         raise SystemExit(1)

@@ -4,37 +4,150 @@
 {% block content %}
 <div class="container">
 
+  {% if current_user.is_fr and fr_stats %}
+  <!-- ══════════════════════ DASHBOARD FR ══════════════════════ -->
+
   <div class="page-header">
-    <h1>Bonjour, {{ current_user.username }} 👋</h1>
-    <p>
-      {% if current_user.is_fr %}
-        Bienvenue sur votre espace Franchisé — Code POS : <strong>{{ current_user.code_magasin }}</strong>
-      {% else %}
-        Tableau de bord — Gestion factures BESTMARK &amp; AFRINETWORKS
-      {% endif %}
-    </p>
+    <div>
+      <h1>Bonjour, {{ current_user.nom_complet or current_user.username }} 👋</h1>
+      <p style="color:var(--text-m);">
+        Code POS <strong>{{ current_user.code_magasin }}</strong>
+        &nbsp;·&nbsp;
+        <span class="badge badge-{{ 'best' if current_user.societe == 'BESTMARK' else 'afri' }}">
+          {{ current_user.societe }}
+        </span>
+      </p>
+    </div>
+    <a href="{{ url_for('factures.mon_espace') }}" class="btn btn-gray btn-sm">Mon Espace complet</a>
   </div>
 
-  <!-- Stats -->
-  {% if current_user.is_fr %}
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-icon blue">📄</div>
-      <div>
-        <div class="stat-value">{{ stats.get('mes_factures', 0) }}</div>
-        <div class="stat-label">Mes factures</div>
+  <!-- ── Cards stats ── -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:16px; margin-bottom:24px;">
+
+    <!-- Total année -->
+    <div class="card" style="padding:20px;">
+      <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">
+        Total {{ fr_stats.annee_cur }}
       </div>
+      <div style="font-size:26px; font-weight:700; color:var(--primary);">
+        {{ "%.2f"|format(fr_stats.total_annee) }}
+      </div>
+      <div style="font-size:12px; color:var(--text-m); margin-top:2px;">MAD</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-icon green">🏪</div>
-      <div>
-        <div class="stat-value">{{ stats.get('mon_code', '—') }}</div>
-        <div class="stat-label">Mon code POS</div>
+
+    <!-- Meilleur mois -->
+    <div class="card" style="padding:20px;">
+      <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">
+        Meilleur mois
       </div>
+      {% if fr_stats.meilleur_mois %}
+      <div style="font-size:22px; font-weight:700; color:#16a34a;">
+        {{ "%.2f"|format(fr_stats.meilleur_mois.net_a_payer) }}
+      </div>
+      <div style="font-size:12px; color:var(--text-m); margin-top:2px;">
+        {{ fr_stats.meilleur_mois.mois_nom }} · MAD
+      </div>
+      {% else %}
+      <div style="font-size:20px; color:var(--text-l);">—</div>
+      {% endif %}
+    </div>
+
+    <!-- Évolution vs mois précédent -->
+    <div class="card" style="padding:20px;">
+      <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">
+        Évolution vs mois préc.
+      </div>
+      {% if fr_stats.evolution is not none %}
+        {% set evo = fr_stats.evolution %}
+        <div style="font-size:26px; font-weight:700; color:{{ '#16a34a' if evo >= 0 else '#dc2626' }};">
+          {{ '+' if evo >= 0 else '' }}{{ evo }}%
+        </div>
+        <div style="font-size:12px; color:var(--text-m); margin-top:2px;">
+          {{ '↑ Hausse' if evo >= 0 else '↓ Baisse' }} par rapport au mois précédent
+        </div>
+      {% else %}
+        <div style="font-size:20px; color:var(--text-l);">—</div>
+        <div style="font-size:12px; color:var(--text-l); margin-top:2px;">Données insuffisantes</div>
+      {% endif %}
+    </div>
+
+    <!-- Nombre de factures -->
+    <div class="card" style="padding:20px;">
+      <div style="font-size:11px; color:var(--text-l); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">
+        Factures totales
+      </div>
+      <div style="font-size:26px; font-weight:700;">{{ fr_stats.nb_factures }}</div>
+      <div style="font-size:12px; color:var(--text-m); margin-top:2px;">toutes périodes</div>
+    </div>
+
+  </div>
+
+  <!-- ── Graphique 12 mois ── -->
+  <div class="card" style="padding:24px; margin-bottom:24px;">
+    <h3 style="font-size:13px; font-weight:600; color:var(--text-m); text-transform:uppercase;
+               letter-spacing:.05em; margin:0 0 16px;">
+      NET À PAYER — 12 derniers mois
+    </h3>
+    <div style="position:relative; height:220px;">
+      <canvas id="chart-dashboard"></canvas>
+    </div>
+  </div>
+
+  <!-- ── 5 dernières factures ── -->
+  <div class="card">
+    <div class="card-header">
+      5 dernières factures
+      <a href="{{ url_for('factures.index') }}" style="font-weight:400; font-size:12px; color:var(--primary);">
+        Voir tout →
+      </a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mois</th>
+            <th>Année</th>
+            <th style="text-align:right;">NET À PAYER</th>
+            <th style="text-align:center;">PDF</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in fr_stats.dernieres %}
+          <tr>
+            <td>{{ f.mois_nom }}</td>
+            <td>{{ f.annee }}</td>
+            <td style="text-align:right; font-weight:600;">
+              {{ "%.2f"|format(f.net_a_payer) }} MAD
+            </td>
+            <td style="text-align:center;">
+              {% if f.fichier_pdf %}
+              <a href="{{ url_for('factures.download', fact_id=f.id) }}"
+                 class="btn btn-success btn-sm">⬇ PDF</a>
+              {% else %}
+              <span style="color:var(--text-l); font-size:12px;">indisponible</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" style="text-align:center; color:var(--text-l); padding:24px;">
+              Aucune facture.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 
   {% else %}
+  <!-- ══════════════════════ DASHBOARD ADMIN/AGENT ══════════════════════ -->
+
+  <div class="page-header">
+    <h1>Bonjour, {{ current_user.username }} 👋</h1>
+    <p>Tableau de bord — Gestion factures BESTMARK &amp; AFRINETWORKS</p>
+  </div>
+
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-icon blue">🏪</div>
@@ -44,7 +157,7 @@
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon afri" style="background:#DBEAFE">🏪</div>
+      <div class="stat-icon" style="background:#DBEAFE;">🏪</div>
       <div>
         <div class="stat-value">{{ stats.get('magasins_afri', 0) }}</div>
         <div class="stat-label">Magasins AFRINETWORKS</div>
@@ -58,31 +171,63 @@
       </div>
     </div>
   </div>
-  {% endif %}
 
-  <!-- Actions rapides -->
   <div class="card">
     <div class="card-header">Actions rapides</div>
     <div class="card-body" style="display:flex; gap:12px; flex-wrap:wrap;">
-
-      <a href="{{ url_for('factures.index') }}" class="btn btn-primary">
-        📄 {% if current_user.is_fr %}Mes factures{% else %}Voir les factures{% endif %}
-      </a>
-
-      {% if not current_user.is_fr %}
-      <a href="{{ url_for('factures.magasins') }}" class="btn btn-gray">
-        🏪 Gestion magasins
-      </a>
-      {% endif %}
-
+      <a href="{{ url_for('factures.index') }}" class="btn btn-primary">📄 Voir les factures</a>
+      <a href="{{ url_for('factures.magasins') }}" class="btn btn-gray">🏪 Gestion magasins</a>
       {% if current_user.is_admin %}
-      <a href="{{ url_for('admin.users') }}" class="btn btn-warning">
-        👥 Gérer les utilisateurs
-      </a>
+      <a href="{{ url_for('admin.users') }}" class="btn btn-warning">👥 Gérer les utilisateurs</a>
       {% endif %}
-
     </div>
   </div>
 
+  {% endif %}
+
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if current_user.is_fr and fr_stats %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const labels = {{ fr_stats.chart_labels | tojson }};
+const values = {{ fr_stats.chart_values | tojson }};
+
+new Chart(document.getElementById('chart-dashboard').getContext('2d'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [{
+      data: values,
+      backgroundColor: values.map(v => v > 0 ? 'rgba(66,153,225,0.7)' : 'rgba(200,200,200,0.3)'),
+      borderColor:     values.map(v => v > 0 ? 'rgba(49,130,206,1)'   : 'rgba(180,180,180,0.5)'),
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.parsed.y.toLocaleString('fr-MA', {minimumFractionDigits:2}) + ' MAD'
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { callback: v => v.toLocaleString('fr-MA') + ' MAD' },
+        grid: { color: 'rgba(0,0,0,0.05)' }
+      },
+      x: { grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endif %}
 {% endblock %}

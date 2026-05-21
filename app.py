@@ -61,6 +61,16 @@ def create_app(env='default'):
     app.register_blueprint(admin_bp,    url_prefix='/admin')
     app.register_blueprint(factures_bp, url_prefix='/factures')
 
+    # ── Redirection premier login ───────────────────────────────────
+    _EXEMPT = {'auth.login', 'auth.logout', 'auth.premier_login', 'static'}
+
+    @app.before_request
+    def check_premier_login():
+        if (current_user.is_authenticated
+                and getattr(current_user, 'must_change_password', False)
+                and request.endpoint not in _EXEMPT):
+            return redirect(url_for('auth.premier_login'))
+
     # ── Créer tables + migrations + admin par défaut ───────────────
     with app.app_context():
         db.create_all()
@@ -73,13 +83,16 @@ def create_app(env='default'):
 def _migrate_db():
     """Ajoute les colonnes manquantes sans toucher aux données existantes."""
     from sqlalchemy import text
+    migrations = [
+        ('must_change_password', 'INTEGER NOT NULL DEFAULT 0'),
+        ('nom_complet',          'TEXT'),
+    ]
     with db.engine.connect() as con:
         cols = [r[1] for r in con.execute(text('PRAGMA table_info(web_users)')).fetchall()]
-        if 'must_change_password' not in cols:
-            con.execute(text(
-                'ALTER TABLE web_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0'
-            ))
-            con.commit()
+        for col_name, col_def in migrations:
+            if col_name not in cols:
+                con.execute(text(f'ALTER TABLE web_users ADD COLUMN {col_name} {col_def}'))
+        con.commit()
 
 
 def _creer_admin_defaut():

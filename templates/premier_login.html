@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Première connexion — Configuration du compte{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:480px; padding-top:40px;">
+
+  <div style="text-align:center; margin-bottom:32px;">
+    <div style="font-size:48px; margin-bottom:12px;">🔐</div>
+    <h1 style="font-size:22px; font-weight:700;">Bienvenue !</h1>
+    <p style="color:var(--text-m); margin-top:6px;">
+      C'est votre première connexion. Veuillez personnaliser votre compte avant de continuer.
+    </p>
+  </div>
+
+  <div class="card">
+    <div style="padding:28px;">
+      <form method="POST">
+
+        <div class="form-group">
+          <label>Nom complet <span style="color:#e53e3e;">*</span></label>
+          <input type="text" name="nom_complet" required autofocus
+                 placeholder="ex: Mohamed Amine El Fassi"
+                 style="font-size:15px;">
+          <small style="color:var(--text-m);">Votre nom tel qu'il apparaîtra sur votre tableau de bord.</small>
+        </div>
+
+        <div class="form-group" style="margin-top:20px;">
+          <label>Nouveau mot de passe <span style="color:#e53e3e;">*</span></label>
+          <input type="password" name="new_password" id="new_password" required
+                 minlength="6" placeholder="Minimum 6 caractères">
+        </div>
+
+        <div class="form-group">
+          <label>Confirmer le mot de passe <span style="color:#e53e3e;">*</span></label>
+          <input type="password" name="confirm_password" id="confirm_password" required
+                 minlength="6" placeholder="Répétez le mot de passe"
+                 oninput="checkMatch()">
+          <small id="match-msg" style="display:none; margin-top:4px;"></small>
+        </div>
+
+        <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:6px;
+                    padding:12px 16px; margin:20px 0; font-size:13px; color:#1E40AF;">
+          💡 Choisissez un mot de passe mémorable. Vous ne pourrez pas le récupérer automatiquement.
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%; font-size:15px; padding:12px;">
+          Valider et accéder à mon espace
+        </button>
+
+      </form>
+    </div>
+  </div>
+
+</div>
+
+{% block scripts %}
+<script>
+function checkMatch() {
+  const a = document.getElementById('new_password').value;
+  const b = document.getElementById('confirm_password').value;
+  const msg = document.getElementById('match-msg');
+  if (!b) { msg.style.display = 'none'; return; }
+  if (a === b) {
+    msg.style.display = 'block';
+    msg.style.color   = '#16a34a';
+    msg.textContent   = '✓ Les mots de passe correspondent.';
+  } else {
+    msg.style.display = 'block';
+    msg.style.color   = '#dc2626';
+    msg.textContent   = '✗ Les mots de passe ne correspondent pas.';
+  }
+}
+</script>
+{% endblock %}
+{% endblock %}
