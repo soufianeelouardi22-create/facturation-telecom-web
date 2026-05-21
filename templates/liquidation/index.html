@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% block title %}Liquidations — Facturation Telecom{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <div class="page-header">
+    <div>
+      <h1>📊 Liquidations Orange</h1>
+      <p style="color:var(--text-m);">Historique des fichiers liquidation importés</p>
+    </div>
+    <a href="{{ url_for('liquidation.import_liq') }}" class="btn btn-primary">
+      ⬆ Importer une liquidation
+    </a>
+  </div>
+
+  <!-- ── Filtres ── -->
+  <div class="card" style="margin-bottom:16px;">
+    <form method="GET" style="display:flex; gap:12px; flex-wrap:wrap; padding:16px; align-items:flex-end;">
+      <div>
+        <label style="font-size:12px; color:var(--text-m); display:block; margin-bottom:4px;">Mois</label>
+        <select name="mois">
+          <option value="">Tous</option>
+          {% for m in mois_list %}
+          <option value="{{ loop.index }}" {{ 'selected' if f_mois == loop.index }}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--text-m); display:block; margin-bottom:4px;">Année</label>
+        <select name="annee">
+          <option value="">Toutes</option>
+          {% for y in range(2023, 2031) %}
+          <option value="{{ y }}" {{ 'selected' if f_annee == y }}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--text-m); display:block; margin-bottom:4px;">Société</label>
+        <select name="societe">
+          <option value="">Toutes</option>
+          <option value="BESTMARK"     {{ 'selected' if f_societe == 'BESTMARK' }}>BESTMARK</option>
+          <option value="AFRINETWORKS" {{ 'selected' if f_societe == 'AFRINETWORKS' }}>AFRINETWORKS</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Filtrer</button>
+      <a href="{{ url_for('liquidation.index') }}" class="btn btn-gray btn-sm">Réinitialiser</a>
+    </form>
+  </div>
+
+  <!-- ── Tableau ── -->
+  <div class="card">
+    <div class="card-header">
+      {{ liquidations|length }} liquidation{{ 's' if liquidations|length != 1 }}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mois</th>
+            <th>Année</th>
+            <th>Société</th>
+            <th style="text-align:right;">Nb codes</th>
+            <th style="text-align:right;">Total commissions</th>
+            <th>Importé le</th>
+            <th>Par</th>
+            <th style="text-align:center;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for liq in liquidations %}
+          <tr>
+            <td>{{ liq.mois_nom }}</td>
+            <td>{{ liq.annee }}</td>
+            <td>
+              <span class="badge badge-{{ 'best' if liq.societe == 'BESTMARK' else 'afri' }}">
+                {{ liq.societe }}
+              </span>
+            </td>
+            <td style="text-align:right;">{{ liq.nb_codes }}</td>
+            <td style="text-align:right; font-weight:600;">
+              {{ "%.2f"|format(liq.total_commissions) }} MAD
+            </td>
+            <td style="color:var(--text-m); font-size:12px;">
+              {{ liq.created_at[:10] if liq.created_at else '—' }}
+            </td>
+            <td style="color:var(--text-m); font-size:12px;">{{ liq.created_by or '—' }}</td>
+            <td style="text-align:center; white-space:nowrap;">
+              <a href="{{ url_for('liquidation.detail', mois=liq.mois, annee=liq.annee, societe=liq.societe) }}"
+                 class="btn btn-primary btn-sm">Détail</a>
+              <a href="{{ url_for('liquidation.export', mois=liq.mois, annee=liq.annee, societe=liq.societe) }}"
+                 class="btn btn-success btn-sm">⬇ Excel</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" style="text-align:center; color:var(--text-l); padding:40px;">
+              Aucune liquidation importée.
+              <a href="{{ url_for('liquidation.import_liq') }}">Importer maintenant →</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

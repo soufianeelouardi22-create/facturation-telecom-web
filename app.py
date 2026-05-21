@@ -51,15 +51,17 @@ def create_app(env='default'):
         }
 
     # ── Blueprints ──────────────────────────────────────────────────
-    from routes.auth    import auth_bp
-    from routes.main    import main_bp
-    from routes.admin   import admin_bp
-    from routes.factures import factures_bp
+    from routes.auth        import auth_bp
+    from routes.main        import main_bp
+    from routes.admin       import admin_bp
+    from routes.factures    import factures_bp
+    from routes.liquidation import liquidation_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
-    app.register_blueprint(admin_bp,    url_prefix='/admin')
-    app.register_blueprint(factures_bp, url_prefix='/factures')
+    app.register_blueprint(admin_bp,       url_prefix='/admin')
+    app.register_blueprint(factures_bp,    url_prefix='/factures')
+    app.register_blueprint(liquidation_bp, url_prefix='/liquidation')
 
     # ── Redirection premier login ───────────────────────────────────
     _EXEMPT = {'auth.login', 'auth.logout', 'auth.premier_login', 'static'}
@@ -76,6 +78,8 @@ def create_app(env='default'):
         db.create_all()
         _migrate_db()
         _creer_admin_defaut()
+        from routes.liquidation import init_tables as _init_liq
+        _init_liq()
 
     return app
 
