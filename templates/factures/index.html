@@ -75,12 +75,8 @@
             <td style="text-align:center; white-space:nowrap;">
               <a href="{{ url_for('factures.detail', fact_id=f.id) }}"
                  class="btn btn-primary btn-sm">Détails</a>
-              {% if f.fichier_pdf %}
-              <a href="{{ url_for('factures.download', fact_id=f.id) }}"
-                 class="btn btn-success btn-sm">⬇ PDF</a>
-              {% else %}
-              <span class="btn btn-gray btn-sm" style="opacity:.5; cursor:default;">PDF</span>
-              {% endif %}
+              <a href="{{ url_for('factures.pdf', fact_id=f.id) }}"
+                 class="btn btn-success btn-sm" target="_blank">⬇ PDF</a>
             </td>
           </tr>
           {% else %}
