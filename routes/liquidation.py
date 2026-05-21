@@ -14,6 +14,11 @@ from utils import role_required
 
 liquidation_bp = Blueprint('liquidation', __name__)
 
+MOIS_NOMS = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+]
+
 DB_PATH = os.environ.get(
     'DATABASE_PATH',
     os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'database.db'))
@@ -109,12 +114,12 @@ def _traiter_fichiers(paths, societe):
 @login_required
 @role_required('admin', 'agent')
 def index():
-    mois_list = current_app.config['SETTINGS'].get('mois', [])
     f_mois    = request.args.get('mois',    type=int)
     f_annee   = request.args.get('annee',   type=int)
     f_societe = request.args.get('societe', '').strip()
 
-    sql    = 'SELECT * FROM liquidations WHERE 1=1'
+    # Lire fichiers_liquidation (synced depuis desktop)
+    sql    = 'SELECT * FROM fichiers_liquidation WHERE 1=1'
     params = []
     if f_mois:
         sql += ' AND mois = ?';    params.append(f_mois)
@@ -124,20 +129,37 @@ def index():
         sql += ' AND societe = ?'; params.append(f_societe)
     sql += ' ORDER BY annee DESC, mois DESC, societe'
 
-    con  = _db()
-    rows = con.execute(sql, params).fetchall()
+    con = _db()
+    try:
+        fl_rows = con.execute(sql, params).fetchall()
+    except sqlite3.OperationalError:
+        fl_rows = []  # table pas encore synchronisée
+
+    # Index des résultats déjà calculés (table web)
+    try:
+        liq_rows  = con.execute(
+            'SELECT mois, annee, societe, nb_codes, total_commissions FROM liquidations'
+        ).fetchall()
+        liq_index = {(r['mois'], r['annee'], r['societe']): dict(r) for r in liq_rows}
+    except sqlite3.OperationalError:
+        liq_index = {}
     con.close()
 
     liquidations = []
-    for r in rows:
+    for r in fl_rows:
         d = dict(r)
         m = d.get('mois')
-        d['mois_nom'] = mois_list[m - 1] if m and 1 <= m <= len(mois_list) else str(m or '')
+        d['mois_nom'] = MOIS_NOMS[m - 1] if m and 1 <= m <= 12 else str(m or '')
+        d['a_mobile']   = bool(d.get('fichier_mobile'))
+        d['a_darbox']   = bool(d.get('fichier_darbox'))
+        d['a_fixe_b2b'] = bool(d.get('fichier_fixe_b2b'))
+        d['a_fixe_b2c'] = bool(d.get('fichier_fixe_b2c'))
+        d['calcule']    = liq_index.get((d['mois'], d['annee'], d['societe']))
         liquidations.append(d)
 
     return render_template('liquidation/index.html',
                            liquidations=liquidations,
-                           mois_list=mois_list,
+                           MOIS_NOMS=MOIS_NOMS,
                            f_mois=f_mois,
                            f_annee=f_annee,
                            f_societe=f_societe)

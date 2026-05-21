@@ -18,16 +18,15 @@
       <form method="POST" enctype="multipart/form-data">
 
         <!-- Mois / Année / Société -->
-        {% set mois_noms = mois_list if mois_list else
-           ['Janvier','Février','Mars','Avril','Mai','Juin',
-            'Juillet','Août','Septembre','Octobre','Novembre','Décembre'] %}
+        {% set MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                       'Juillet','Août','Septembre','Octobre','Novembre','Décembre'] %}
         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:24px;">
           <div class="form-group" style="margin:0;">
             <label>Mois <span style="color:#e53e3e;">*</span></label>
             <select name="mois" required>
               <option value="">— Choisir —</option>
-              {% for m in mois_noms %}
-              <option value="{{ loop.index }}" {{ 'selected' if loop.index == now.month }}>{{ m }}</option>
+              {% for nom in MOIS %}
+              <option value="{{ loop.index }}" {{ 'selected' if loop.index == now.month }}>{{ nom }}</option>
               {% endfor %}
             </select>
           </div>
