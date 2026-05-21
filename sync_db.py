@@ -23,7 +23,17 @@ DEFAULT_DST = os.environ.get(
     os.path.join(os.path.dirname(__file__), 'config', 'database_web.db')
 )
 
-TABLES_TO_SYNC = ('magasins', 'factures', 'types_magasins')
+TABLES_TO_SYNC = (
+    'magasins',
+    'factures',
+    'types_magasins',
+    'liquidation_mobile',
+    'liquidation_darbox',
+    'liquidation_fixe_b2b',
+    'liquidation_fixe_b2c',
+    'fichiers_liquidation',
+    'parametres',
+)
 
 # ── PythonAnywhere ──────────────────────────────────────────────────────────
 PA_USERNAME = 'soufianeelouardi'

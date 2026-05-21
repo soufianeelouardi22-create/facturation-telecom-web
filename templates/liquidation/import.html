@@ -6,7 +6,7 @@
 
   <div class="page-header">
     <div>
-      <h1>⬆ Importer une liquidation</html>
+      <h1>⬆ Importer une liquidation</h1>
       <p style="color:var(--text-m);">Upload des 4 fichiers Orange + calcul automatique des primes</p>
     </div>
     <a href="{{ url_for('liquidation.index') }}" class="btn btn-gray btn-sm">← Retour</a>
@@ -18,21 +18,24 @@
       <form method="POST" enctype="multipart/form-data">
 
         <!-- Mois / Année / Société -->
+        {% set mois_noms = mois_list if mois_list else
+           ['Janvier','Février','Mars','Avril','Mai','Juin',
+            'Juillet','Août','Septembre','Octobre','Novembre','Décembre'] %}
         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:24px;">
           <div class="form-group" style="margin:0;">
             <label>Mois <span style="color:#e53e3e;">*</span></label>
             <select name="mois" required>
               <option value="">— Choisir —</option>
-              {% for m in mois_list %}
-              <option value="{{ loop.index }}">{{ m }}</option>
+              {% for m in mois_noms %}
+              <option value="{{ loop.index }}" {{ 'selected' if loop.index == now.month }}>{{ m }}</option>
               {% endfor %}
             </select>
           </div>
           <div class="form-group" style="margin:0;">
             <label>Année <span style="color:#e53e3e;">*</span></label>
             <select name="annee" required>
-              {% for y in range(2025, 2028) %}
-              <option value="{{ y }}" {{ 'selected' if y == 2025 }}>{{ y }}</option>
+              {% for y in range(now.year - 1, now.year + 3) %}
+              <option value="{{ y }}" {{ 'selected' if y == now.year }}>{{ y }}</option>
               {% endfor %}
             </select>
           </div>
