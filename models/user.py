@@ -17,9 +17,10 @@ class User(UserMixin, db.Model):
     role        = db.Column(db.String(16),  nullable=False, default='agent')  # admin | agent | fr
     societe     = db.Column(db.String(32),  nullable=True)   # BESTMARK | AFRINETWORKS (pour role fr)
     code_magasin = db.Column(db.String(16), nullable=True)   # code POS (pour role fr)
-    actif       = db.Column(db.Boolean, default=True)
-    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
-    last_login  = db.Column(db.DateTime, nullable=True)
+    actif                = db.Column(db.Boolean, default=True)
+    must_change_password = db.Column(db.Boolean, default=False)
+    created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login           = db.Column(db.DateTime, nullable=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

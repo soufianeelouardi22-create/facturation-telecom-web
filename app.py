@@ -61,12 +61,25 @@ def create_app(env='default'):
     app.register_blueprint(admin_bp,    url_prefix='/admin')
     app.register_blueprint(factures_bp, url_prefix='/factures')
 
-    # ── Créer tables + admin par défaut ────────────────────────────
+    # ── Créer tables + migrations + admin par défaut ───────────────
     with app.app_context():
         db.create_all()
+        _migrate_db()
         _creer_admin_defaut()
 
     return app
+
+
+def _migrate_db():
+    """Ajoute les colonnes manquantes sans toucher aux données existantes."""
+    from sqlalchemy import text
+    with db.engine.connect() as con:
+        cols = [r[1] for r in con.execute(text('PRAGMA table_info(web_users)')).fetchall()]
+        if 'must_change_password' not in cols:
+            con.execute(text(
+                'ALTER TABLE web_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0'
+            ))
+            con.commit()
 
 
 def _creer_admin_defaut():

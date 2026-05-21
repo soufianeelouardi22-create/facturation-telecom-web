@@ -24,6 +24,7 @@ instance/
 # Exports et uploads
 data/exports/
 static/uploads/
+comptes_fr.xlsx
 
 # Logs
 *.log
