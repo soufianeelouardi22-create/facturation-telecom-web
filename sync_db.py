@@ -11,6 +11,7 @@ Usage :
 import sqlite3
 import os
 import argparse
+import urllib.parse
 from datetime import datetime
 
 BASE_DIR    = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -210,9 +211,9 @@ def upload_fichiers_liquidation(src_path=DEFAULT_SRC, dst_path=DEFAULT_DST, verb
                 continue
 
             filename = os.path.basename(win_path)
-            pa_url   = (f'https://www.pythonanywhere.com/api/v0/user/{PA_USERNAME}/'
-                        f'files/path{_PA_LIQ_BASE}/{societe}/{annee}/{mois:02d}/{filename}')
             pa_path  = f'{_PA_LIQ_BASE}/{societe}/{annee}/{mois:02d}/{filename}'
+            pa_url   = ('https://www.pythonanywhere.com/api/v0/user/{}/files/path{}'.format(
+                PA_USERNAME, urllib.parse.quote(pa_path, safe='/')))
 
             log(f'  [{societe} {mois:02d}/{annee}] {label} → {pa_path}')
             if _multipart_upload(pa_url, win_path, headers, log):
