@@ -151,41 +151,96 @@ def _multipart_upload(url, local_path, headers, log):
     return True
 
 
-def upload_fichiers_liquidation(verbose=True):
-    """Upload tous les fichiers Excel de data/ vers PythonAnywhere."""
-    import urllib.request
-    import urllib.error
+_PA_ROOT     = f'/home/{PA_USERNAME}/facturation-telecom-web'
+_PA_LIQ_BASE = f'{_PA_ROOT}/data/liquidation'
+
+_FICHIER_COLS = [
+    ('fichier_mobile',   'mobile'),
+    ('fichier_darbox',   'darbox'),
+    ('fichier_fixe_b2b', 'fixe_b2b'),
+    ('fichier_fixe_b2c', 'fixe_b2c'),
+]
+
+
+def upload_fichiers_liquidation(src_path=DEFAULT_SRC, dst_path=DEFAULT_DST, verbose=True):
+    """Lit fichiers_liquidation depuis database.db, upload chaque Excel vers PythonAnywhere
+    sous data/liquidation/{societe}/{annee}/{mois:02d}/{nom_fichier},
+    puis met à jour les chemins dans database_web.db avec les chemins PA."""
 
     def log(msg):
         if verbose:
             print(msg)
 
-    data_dir = os.path.join(BASE_DIR, 'data')
-    if not os.path.isdir(data_dir):
-        log('[upload_fichiers] Dossier data/ introuvable, skip.')
+    if not os.path.exists(src_path):
+        log(f'[upload_fichiers] DB source introuvable : {src_path}')
+        return 0
+
+    # ── Lire tous les chemins depuis la DB desktop ──────────────────
+    src = sqlite3.connect(src_path)
+    src.row_factory = sqlite3.Row
+    try:
+        rows = src.execute('SELECT * FROM fichiers_liquidation').fetchall()
+    except sqlite3.OperationalError:
+        log('[upload_fichiers] Table fichiers_liquidation absente dans la source.')
+        src.close()
+        return 0
+    src.close()
+
+    if not rows:
+        log('[upload_fichiers] Aucune entrée dans fichiers_liquidation.')
         return 0
 
     headers = {'Authorization': f'Token {PA_TOKEN}'}
+    dst     = sqlite3.connect(dst_path)
+    dst.row_factory = sqlite3.Row
     count   = 0
 
-    for root, _dirs, files in os.walk(data_dir):
-        for filename in files:
-            if not filename.lower().endswith(('.xlsx', '.xls')):
+    for row in rows:
+        mois    = row['mois']
+        annee   = row['annee']
+        societe = row['societe']
+        new_paths = {}  # col → chemin PA après upload réussi
+
+        for col, label in _FICHIER_COLS:
+            win_path = row[col]
+            if not win_path:
                 continue
-            local_path = os.path.join(root, filename)
-            rel_path   = os.path.relpath(local_path, BASE_DIR).replace('\\', '/')
-            pa_url = (f'https://www.pythonanywhere.com/api/v0/user/{PA_USERNAME}/'
-                      f'files/path/home/{PA_USERNAME}/facturation-telecom-web/{rel_path}')
-            log(f'  [fichier] {rel_path}')
-            if _multipart_upload(pa_url, local_path, headers, log):
+            if not os.path.exists(win_path):
+                log(f'  [SKIP] {societe} {mois:02d}/{annee} {label} — fichier absent : {win_path}')
+                continue
+
+            filename = os.path.basename(win_path)
+            pa_url   = (f'https://www.pythonanywhere.com/api/v0/user/{PA_USERNAME}/'
+                        f'files/path{_PA_LIQ_BASE}/{societe}/{annee}/{mois:02d}/{filename}')
+            pa_path  = f'{_PA_LIQ_BASE}/{societe}/{annee}/{mois:02d}/{filename}'
+
+            log(f'  [{societe} {mois:02d}/{annee}] {label} → {pa_path}')
+            if _multipart_upload(pa_url, win_path, headers, log):
+                new_paths[col] = pa_path
                 count += 1
 
-    log(f'[upload_fichiers] {count} fichier(s) Excel uploadé(s).\n')
+        # ── Mettre à jour database_web.db avec les chemins PA ───────
+        if new_paths:
+            set_clause = ', '.join(f'{col} = ?' for col in new_paths)
+            vals       = list(new_paths.values()) + [mois, annee, societe]
+            try:
+                dst.execute(
+                    f'UPDATE fichiers_liquidation SET {set_clause} '
+                    f'WHERE mois = ? AND annee = ? AND societe = ?',
+                    vals,
+                )
+                dst.commit()
+                log(f'    chemins PA enregistrés dans database_web.db')
+            except sqlite3.OperationalError as e:
+                log(f'    [ERREUR] Mise à jour DB : {e}')
+
+    dst.close()
+    log(f'[upload_fichiers] {count} fichier(s) uploadé(s).\n')
     return count
 
 
 def upload_to_pythonanywhere(dst_path=DEFAULT_DST, verbose=True):
-    """Sync locale → upload database_web.db + fichiers Excel → reload webapp PythonAnywhere."""
+    """Sync locale → upload fichiers Excel + patch chemins PA → upload database_web.db → reload."""
     def log(msg):
         if verbose:
             print(msg)
@@ -195,19 +250,19 @@ def upload_to_pythonanywhere(dst_path=DEFAULT_DST, verbose=True):
 
     headers = {'Authorization': f'Token {PA_TOKEN}'}
 
-    # ── 1. Sync locale ──────────────────────────────────────────────
+    # ── 1. Sync locale (database.db → database_web.db) ─────────────
     sync(dst_path=dst_path, verbose=verbose)
 
-    # ── 2. Upload database_web.db ───────────────────────────────────
+    # ── 2. Upload fichiers Excel + patch chemins dans database_web.db
+    log('[upload] Envoi des fichiers liquidation Excel...')
+    upload_fichiers_liquidation(dst_path=dst_path, verbose=verbose)
+
+    # ── 3. Upload database_web.db (contient maintenant les chemins PA)
     log(f'[upload] Envoi database_web.db vers PythonAnywhere...')
     log(f'  URL : {PA_FILE_URL}')
     if not _multipart_upload(PA_FILE_URL, dst_path, headers, log):
         return False
     log(f'  [OK] Base de données uploadée')
-
-    # ── 3. Upload fichiers Excel (data/) ────────────────────────────
-    log(f'[upload] Envoi des fichiers Excel...')
-    upload_fichiers_liquidation(verbose=verbose)
 
     # ── 4. Reload webapp ────────────────────────────────────────────
     log(f'[reload] Rechargement de {PA_USERNAME}.pythonanywhere.com...')
