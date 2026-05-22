@@ -117,8 +117,75 @@ def sync(src_path=DEFAULT_SRC, dst_path=DEFAULT_DST, verbose=True):
     return total_rows
 
 
+def _multipart_upload(url, local_path, headers, log):
+    """Upload un fichier local vers PythonAnywhere via multipart/form-data. Retourne True si OK."""
+    import urllib.request
+    import urllib.error
+
+    with open(local_path, 'rb') as f:
+        file_data = f.read()
+
+    boundary  = b'----PASyncBoundary'
+    fname     = os.path.basename(local_path).encode()
+    body = (
+        b'--' + boundary + b'\r\n'
+        b'Content-Disposition: form-data; name="content"; filename="' + fname + b'"\r\n'
+        b'Content-Type: application/octet-stream\r\n\r\n'
+        + file_data + b'\r\n'
+        b'--' + boundary + b'--\r\n'
+    )
+    req = urllib.request.Request(
+        url, data=body,
+        headers={**headers, 'Content-Type': f'multipart/form-data; boundary={boundary.decode()}'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            status = resp.status
+    except urllib.error.HTTPError as e:
+        if e.code not in (200, 201):
+            log(f'    [ERREUR] HTTP {e.code} — {e.read().decode()[:200]}')
+            return False
+        status = e.code
+    log(f'    [OK] HTTP {status}')
+    return True
+
+
+def upload_fichiers_liquidation(verbose=True):
+    """Upload tous les fichiers Excel de data/ vers PythonAnywhere."""
+    import urllib.request
+    import urllib.error
+
+    def log(msg):
+        if verbose:
+            print(msg)
+
+    data_dir = os.path.join(BASE_DIR, 'data')
+    if not os.path.isdir(data_dir):
+        log('[upload_fichiers] Dossier data/ introuvable, skip.')
+        return 0
+
+    headers = {'Authorization': f'Token {PA_TOKEN}'}
+    count   = 0
+
+    for root, _dirs, files in os.walk(data_dir):
+        for filename in files:
+            if not filename.lower().endswith(('.xlsx', '.xls')):
+                continue
+            local_path = os.path.join(root, filename)
+            rel_path   = os.path.relpath(local_path, BASE_DIR).replace('\\', '/')
+            pa_url = (f'https://www.pythonanywhere.com/api/v0/user/{PA_USERNAME}/'
+                      f'files/path/home/{PA_USERNAME}/facturation-telecom-web/{rel_path}')
+            log(f'  [fichier] {rel_path}')
+            if _multipart_upload(pa_url, local_path, headers, log):
+                count += 1
+
+    log(f'[upload_fichiers] {count} fichier(s) Excel uploadé(s).\n')
+    return count
+
+
 def upload_to_pythonanywhere(dst_path=DEFAULT_DST, verbose=True):
-    """Sync locale → upload database_web.db → reload webapp PythonAnywhere."""
+    """Sync locale → upload database_web.db + fichiers Excel → reload webapp PythonAnywhere."""
     def log(msg):
         if verbose:
             print(msg)
@@ -131,45 +198,18 @@ def upload_to_pythonanywhere(dst_path=DEFAULT_DST, verbose=True):
     # ── 1. Sync locale ──────────────────────────────────────────────
     sync(dst_path=dst_path, verbose=verbose)
 
-    # ── 2. Upload du fichier (multipart/form-data) ──────────────────
-    log(f'[upload] Envoi vers PythonAnywhere...')
+    # ── 2. Upload database_web.db ───────────────────────────────────
+    log(f'[upload] Envoi database_web.db vers PythonAnywhere...')
     log(f'  URL : {PA_FILE_URL}')
+    if not _multipart_upload(PA_FILE_URL, dst_path, headers, log):
+        return False
+    log(f'  [OK] Base de données uploadée')
 
-    with open(dst_path, 'rb') as f:
-        file_data = f.read()
+    # ── 3. Upload fichiers Excel (data/) ────────────────────────────
+    log(f'[upload] Envoi des fichiers Excel...')
+    upload_fichiers_liquidation(verbose=verbose)
 
-    # Construire le corps multipart manuellement
-    boundary = b'----PASyncBoundary'
-    filename = os.path.basename(dst_path).encode()
-    body = (
-        b'--' + boundary + b'\r\n'
-        b'Content-Disposition: form-data; name="content"; filename="' + filename + b'"\r\n'
-        b'Content-Type: application/octet-stream\r\n\r\n'
-        + file_data + b'\r\n'
-        b'--' + boundary + b'--\r\n'
-    )
-
-    req = urllib.request.Request(
-        PA_FILE_URL,
-        data=body,
-        headers={
-            **headers,
-            'Content-Type': f'multipart/form-data; boundary={boundary.decode()}',
-        },
-        method='POST'
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            status = resp.status
-    except urllib.error.HTTPError as e:
-        if e.code not in (200, 201):
-            log(f'  [ERREUR] Upload échoué : HTTP {e.code} — {e.read().decode()}')
-            return False
-        status = e.code
-
-    log(f'  [OK] Fichier uploadé (HTTP {status})')
-
-    # ── 3. Reload webapp ────────────────────────────────────────────
+    # ── 4. Reload webapp ────────────────────────────────────────────
     log(f'[reload] Rechargement de {PA_USERNAME}.pythonanywhere.com...')
 
     req = urllib.request.Request(

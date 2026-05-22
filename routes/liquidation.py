@@ -30,6 +30,28 @@ DB_PATH = os.environ.get(
 # Fichiers uploadés dans data/uploads/liquidation/SOCIETE/ANNEE/MM/
 UPLOAD_BASE = os.path.join(_PROJECT_ROOT, 'data', 'uploads', 'liquidation')
 
+# Préfixe PythonAnywhere pour la conversion des chemins desktop
+_PA_ROOT = '/home/soufianeelouardi/facturation-telecom-web'
+
+
+def _localiser_chemin(stored_path):
+    """Traduit un chemin desktop stocké vers le chemin local valide.
+
+    Sur Windows (desktop) le chemin existe tel quel.
+    Sur PythonAnywhere, remplace C:\\FacturationTelecom\\ par /home/.../facturation-telecom-web/.
+    Retourne None si le chemin est vide ou non résolvable.
+    """
+    if not stored_path:
+        return None
+    if os.path.exists(stored_path):
+        return stored_path
+    # Normaliser les séparateurs puis remplacer le préfixe Windows
+    p = stored_path.replace('\\', '/')
+    for win_pfx in ('C:/FacturationTelecom', 'c:/facturationtelecom'):
+        if p.lower().startswith(win_pfx.lower()):
+            return _PA_ROOT + p[len(win_pfx):]
+    return None
+
 # Colonnes de primes : (clé_json, libellé_affiché)
 COLONNES = [
     ('airtime_prepaye',       'Airtime Prépayé'),
@@ -176,10 +198,10 @@ def index():
         d = dict(r)
         m = d.get('mois')
         d['mois_nom']   = MOIS_NOMS[m - 1] if m and 1 <= m <= 12 else str(m or '')
-        d['a_mobile']   = bool(d.get('fichier_mobile'))
-        d['a_darbox']   = bool(d.get('fichier_darbox'))
-        d['a_fixe_b2b'] = bool(d.get('fichier_fixe_b2b'))
-        d['a_fixe_b2c'] = bool(d.get('fichier_fixe_b2c'))
+        d['a_mobile']   = bool(_localiser_chemin(d.get('fichier_mobile')))
+        d['a_darbox']   = bool(_localiser_chemin(d.get('fichier_darbox')))
+        d['a_fixe_b2b'] = bool(_localiser_chemin(d.get('fichier_fixe_b2b')))
+        d['a_fixe_b2c'] = bool(_localiser_chemin(d.get('fichier_fixe_b2c')))
         d['calcule']    = liq_index.get((d['mois'], d['annee'], d['societe']))
         liquidations.append(d)
 
@@ -224,8 +246,28 @@ def import_liq():
                 f.save(dest)
                 paths[champ] = dest
 
+        # Fallback : utiliser les chemins depuis fichiers_liquidation si disponibles sur ce serveur
         if not paths:
-            flash('Aucun fichier uploadé.', 'danger')
+            try:
+                con_fl = _db()
+                fl = con_fl.execute(
+                    'SELECT * FROM fichiers_liquidation WHERE mois=? AND annee=? AND societe=?',
+                    (mois, annee, societe)
+                ).fetchone()
+                con_fl.close()
+                if fl:
+                    for champ, col in [('mobile',   'fichier_mobile'),
+                                       ('darbox',   'fichier_darbox'),
+                                       ('fixe_b2b', 'fichier_fixe_b2b'),
+                                       ('fixe_b2c', 'fichier_fixe_b2c')]:
+                        resolved = _localiser_chemin(fl[col] if fl[col] else None)
+                        if resolved:
+                            paths[champ] = resolved
+            except Exception:
+                pass
+
+        if not paths:
+            flash('Aucun fichier uploadé et aucun fichier trouvé en base.', 'danger')
             return render_template('liquidation/import.html',
                                    MOIS_NOMS=MOIS_NOMS,
                                    pre_mois=mois, pre_annee=annee, pre_societe=societe)
