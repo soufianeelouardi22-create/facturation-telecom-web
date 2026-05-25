@@ -18,7 +18,8 @@ MOIS_NOMS = [
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ]
 
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_PROJECT_ROOT  = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_WEB_ROOT      = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 DB_PATH = os.environ.get(
     'DATABASE_PATH',
@@ -107,8 +108,8 @@ class _DBAdapter:
 # ── Traitement ───────────────────────────────────────────────────────────────
 
 def _charger_processor():
-    if _PROJECT_ROOT not in sys.path:
-        sys.path.insert(0, _PROJECT_ROOT)
+    if _WEB_ROOT not in sys.path:
+        sys.path.insert(0, _WEB_ROOT)
     from modules.liquidation_processor import LiquidationProcessor
     proc = LiquidationProcessor()
     coef_path = os.path.join(_PROJECT_ROOT, 'config', 'coefficients.json')
