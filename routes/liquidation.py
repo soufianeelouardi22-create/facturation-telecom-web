@@ -51,7 +51,7 @@ _PROC_KEY = {
     'objectif_mobile':   'prime_objectif_mobile',
     'objectif_fixe':     'prime_objectif_fixe',
     'penalite':          'penalite',
-    'tpe':               'tpe',
+    'tpe':               'prime_tpe',
 }
 
 CHAMPS_DB = [col for col, _ in COLONNES]
