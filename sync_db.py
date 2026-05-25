@@ -34,6 +34,7 @@ TABLES_TO_SYNC = (
     'liquidation_fixe_b2c',
     'fichiers_liquidation',
     'parametres',
+    'liquidations_web',
 )
 
 # ── PythonAnywhere ──────────────────────────────────────────────────────────
@@ -152,96 +153,56 @@ def _multipart_upload(url, local_path, headers, log):
     return True
 
 
-_PA_ROOT     = f'/home/{PA_USERNAME}/facturation-telecom-web'
-_PA_LIQ_BASE = f'{_PA_ROOT}/data/liquidation'
-
-_FICHIER_COLS = [
-    ('fichier_mobile',   'mobile'),
-    ('fichier_darbox',   'darbox'),
-    ('fichier_fixe_b2b', 'fixe_b2b'),
-    ('fichier_fixe_b2c', 'fixe_b2c'),
-]
-
-
-def upload_fichiers_liquidation(src_path=DEFAULT_SRC, dst_path=DEFAULT_DST, verbose=True):
-    """Lit fichiers_liquidation depuis database.db, upload chaque Excel vers PythonAnywhere
-    sous data/liquidation/{societe}/{annee}/{mois:02d}/{nom_fichier},
-    puis met à jour les chemins dans database_web.db avec les chemins PA."""
+def nettoyer_pa_liquidation(verbose=True):
+    """Supprime data/liquidation/ sur PythonAnywhere pour libérer le quota."""
+    import urllib.request
+    import urllib.error
+    import json as _json
 
     def log(msg):
         if verbose:
             print(msg)
 
-    if not os.path.exists(src_path):
-        log(f'[upload_fichiers] DB source introuvable : {src_path}')
-        return 0
+    headers  = {'Authorization': f'Token {PA_TOKEN}'}
+    pa_dir   = f'/home/{PA_USERNAME}/facturation-telecom-web/data/liquidation'
+    tree_url = f'{PA_BASE}/files/tree/?path={pa_dir}'
 
-    # ── Lire tous les chemins depuis la DB desktop ──────────────────
-    src = sqlite3.connect(src_path)
-    src.row_factory = sqlite3.Row
+    log(f'[cleanup] Listage de {pa_dir}...')
+    req = urllib.request.Request(tree_url, headers=headers)
     try:
-        rows = src.execute('SELECT * FROM fichiers_liquidation').fetchall()
-    except sqlite3.OperationalError:
-        log('[upload_fichiers] Table fichiers_liquidation absente dans la source.')
-        src.close()
-        return 0
-    src.close()
+        with urllib.request.urlopen(req) as resp:
+            fichiers = _json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            log('[cleanup] Dossier introuvable sur PA — rien à supprimer.')
+            return True
+        log(f'[cleanup] Erreur listing : HTTP {e.code} — {e.read().decode()[:200]}')
+        return False
 
-    if not rows:
-        log('[upload_fichiers] Aucune entrée dans fichiers_liquidation.')
-        return 0
+    if not fichiers:
+        log('[cleanup] Dossier déjà vide.')
+        return True
 
-    headers = {'Authorization': f'Token {PA_TOKEN}'}
-    dst     = sqlite3.connect(dst_path)
-    dst.row_factory = sqlite3.Row
-    count   = 0
+    log(f'[cleanup] {len(fichiers)} fichier(s) à supprimer...')
+    count = 0
+    for fpath in fichiers:
+        url = ('https://www.pythonanywhere.com/api/v0/user/{}/files/path{}'.format(
+            PA_USERNAME, urllib.parse.quote(fpath, safe='/')))
+        req = urllib.request.Request(url, headers=headers, method='DELETE')
+        try:
+            with urllib.request.urlopen(req) as _:
+                pass
+            log(f'  [DEL] {fpath}')
+            count += 1
+        except urllib.error.HTTPError as e:
+            log(f'  [ERREUR] DELETE {fpath} : HTTP {e.code}')
 
-    for row in rows:
-        mois    = row['mois']
-        annee   = row['annee']
-        societe = row['societe']
-        new_paths = {}  # col → chemin PA après upload réussi
-
-        for col, label in _FICHIER_COLS:
-            win_path = row[col]
-            if not win_path:
-                continue
-            if not os.path.exists(win_path):
-                log(f'  [SKIP] {societe} {mois:02d}/{annee} {label} — fichier absent : {win_path}')
-                continue
-
-            filename = os.path.basename(win_path)
-            pa_path  = f'{_PA_LIQ_BASE}/{societe}/{annee}/{mois:02d}/{filename}'
-            pa_url   = ('https://www.pythonanywhere.com/api/v0/user/{}/files/path{}'.format(
-                PA_USERNAME, urllib.parse.quote(pa_path, safe='/')))
-
-            log(f'  [{societe} {mois:02d}/{annee}] {label} → {pa_path}')
-            if _multipart_upload(pa_url, win_path, headers, log):
-                new_paths[col] = pa_path
-                count += 1
-
-        # ── Mettre à jour database_web.db avec les chemins PA ───────
-        if new_paths:
-            set_clause = ', '.join(f'{col} = ?' for col in new_paths)
-            vals       = list(new_paths.values()) + [mois, annee, societe]
-            try:
-                dst.execute(
-                    f'UPDATE fichiers_liquidation SET {set_clause} '
-                    f'WHERE mois = ? AND annee = ? AND societe = ?',
-                    vals,
-                )
-                dst.commit()
-                log(f'    chemins PA enregistrés dans database_web.db')
-            except sqlite3.OperationalError as e:
-                log(f'    [ERREUR] Mise à jour DB : {e}')
-
-    dst.close()
-    log(f'[upload_fichiers] {count} fichier(s) uploadé(s).\n')
-    return count
+    log(f'[cleanup] {count} fichier(s) supprimé(s).\n')
+    return True
 
 
 def upload_to_pythonanywhere(dst_path=DEFAULT_DST, verbose=True):
-    """Sync locale → upload fichiers Excel + patch chemins PA → upload database_web.db → reload."""
+    """Sync locale → upload database_web.db → reload webapp PythonAnywhere."""
     def log(msg):
         if verbose:
             print(msg)
@@ -254,18 +215,14 @@ def upload_to_pythonanywhere(dst_path=DEFAULT_DST, verbose=True):
     # ── 1. Sync locale (database.db → database_web.db) ─────────────
     sync(dst_path=dst_path, verbose=verbose)
 
-    # ── 2. Upload fichiers Excel + patch chemins dans database_web.db
-    log('[upload] Envoi des fichiers liquidation Excel...')
-    upload_fichiers_liquidation(dst_path=dst_path, verbose=verbose)
-
-    # ── 3. Upload database_web.db (contient maintenant les chemins PA)
+    # ── 2. Upload database_web.db ───────────────────────────────────
     log(f'[upload] Envoi database_web.db vers PythonAnywhere...')
     log(f'  URL : {PA_FILE_URL}')
     if not _multipart_upload(PA_FILE_URL, dst_path, headers, log):
         return False
     log(f'  [OK] Base de données uploadée')
 
-    # ── 4. Reload webapp ────────────────────────────────────────────
+    # ── 3. Reload webapp ────────────────────────────────────────────
     log(f'[reload] Rechargement de {PA_USERNAME}.pythonanywhere.com...')
 
     req = urllib.request.Request(
@@ -290,13 +247,17 @@ def upload_to_pythonanywhere(dst_path=DEFAULT_DST, verbose=True):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sync desktop DB -> web DB (+ PythonAnywhere)')
-    parser.add_argument('--src',    default=DEFAULT_SRC,  help='Chemin DB source (desktop)')
-    parser.add_argument('--dst',    default=DEFAULT_DST,  help='Chemin DB destination (web)')
-    parser.add_argument('--upload', action='store_true',  help='Upload vers PythonAnywhere après sync')
+    parser.add_argument('--src',     default=DEFAULT_SRC,  help='Chemin DB source (desktop)')
+    parser.add_argument('--dst',     default=DEFAULT_DST,  help='Chemin DB destination (web)')
+    parser.add_argument('--upload',  action='store_true',  help='Upload vers PythonAnywhere après sync')
+    parser.add_argument('--cleanup', action='store_true',  help='Supprimer data/liquidation/ sur PA')
     args = parser.parse_args()
 
     try:
-        if args.upload:
+        if args.cleanup:
+            ok = nettoyer_pa_liquidation()
+            raise SystemExit(0 if ok else 1)
+        elif args.upload:
             ok = upload_to_pythonanywhere(dst_path=args.dst)
             raise SystemExit(0 if ok else 1)
         else:
