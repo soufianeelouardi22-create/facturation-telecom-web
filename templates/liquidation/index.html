@@ -129,6 +129,8 @@
                  class="btn btn-primary btn-sm">Détail</a>
               <a href="{{ url_for('liquidation.export', mois=liq.mois, annee=liq.annee, societe=liq.societe) }}"
                  class="btn btn-success btn-sm">⬇ Excel</a>
+              <a href="{{ url_for('liquidation.import_liq') }}?mois={{ liq.mois }}&annee={{ liq.annee }}&societe={{ liq.societe }}"
+                 class="btn btn-warning btn-sm">🔄 Recalculer</a>
               {% else %}
               <a href="{{ url_for('liquidation.import_liq') }}?mois={{ liq.mois }}&annee={{ liq.annee }}&societe={{ liq.societe }}"
                  class="btn btn-warning btn-sm">Calculer</a>
