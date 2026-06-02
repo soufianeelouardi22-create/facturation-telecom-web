@@ -126,11 +126,18 @@ def _traiter_fichiers(fichiers, societe):
     darbox_data = proc.lire_fichier_darbox(fichiers['darbox'])      if fichiers.get('darbox')    else {}
     b2b_data    = proc.lire_fichier_fixe_b2b(fichiers['fixe_b2b']) if fichiers.get('fixe_b2b') else {}
     b2c_data    = proc.lire_fichier_fixe_b2c(fichiers['fixe_b2c']) if fichiers.get('fixe_b2c') else {}
-    return proc.calculer_etat_complet(
+    resultats = proc.calculer_etat_complet(
         mobile_data, darbox_data, b2b_data, b2c_data,
         _DBAdapter(os.path.abspath(DB_PATH)),
         societe,
     )
+    if resultats:
+        premier_code, premier_vals = next(iter(resultats.items()))
+        print("DEBUG résultats processor:", json.dumps(
+            {premier_code: {k: v for k, v in premier_vals.items() if not k.startswith('_')}},
+            ensure_ascii=False, default=str
+        ))
+    return resultats
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
