@@ -226,6 +226,9 @@ def import_liq():
             flash('Aucun fichier uploadé.', 'danger')
             return _render_form()
 
+        for buf in fichiers.values():
+            buf.seek(0)
+
         # Calcul des primes via LiquidationProcessor
         try:
             etat = _traiter_fichiers(fichiers, societe)
