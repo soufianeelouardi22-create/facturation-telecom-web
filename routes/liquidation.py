@@ -132,11 +132,8 @@ def _traiter_fichiers(fichiers, societe):
         societe,
     )
     if resultats:
-        premier_code, premier_vals = next(iter(resultats.items()))
-        print("DEBUG résultats processor:", json.dumps(
-            {premier_code: {k: v for k, v in premier_vals.items() if not k.startswith('_')}},
-            ensure_ascii=False, default=str
-        ))
+        import logging
+        logging.warning("DEBUG résultats: " + str({k: v for k, v in list(resultats.items())[:2]}))
     return resultats
 
 
