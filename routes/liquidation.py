@@ -120,21 +120,53 @@ def _charger_processor():
 
 
 def _traiter_fichiers(fichiers, societe):
-    """fichiers : dict {champ: BytesIO}. Retourne {code: {proc_key: valeur}}."""
-    proc = _charger_processor()
-    mobile_data = proc.lire_fichier_mobile(io.BytesIO(fichiers['mobile'].getvalue()))      if fichiers.get('mobile')    else {}
-    darbox_data = proc.lire_fichier_darbox(io.BytesIO(fichiers['darbox'].getvalue()))      if fichiers.get('darbox')    else {}
-    b2b_data    = proc.lire_fichier_fixe_b2b(io.BytesIO(fichiers['fixe_b2b'].getvalue())) if fichiers.get('fixe_b2b') else {}
-    b2c_data    = proc.lire_fichier_fixe_b2c(io.BytesIO(fichiers['fixe_b2c'].getvalue())) if fichiers.get('fixe_b2c') else {}
-    resultats = proc.calculer_etat_complet(
-        mobile_data, darbox_data, b2b_data, b2c_data,
-        _DBAdapter(os.path.abspath(DB_PATH)),
-        societe,
-    )
-    if resultats:
-        import logging
-        logging.warning("DEBUG résultats: " + str({k: v for k, v in list(resultats.items())[:2]}))
-    return resultats
+    """fichiers : dict {champ: BytesIO}. Écrit dans des fichiers temporaires,
+    passe les chemins au processor, supprime les fichiers dans tous les cas."""
+    import tempfile
+    import logging
+
+    proc      = _charger_processor()
+    tmp_files = []  # (champ, path) — pour nettoyage final
+
+    def _tmp(champ):
+        buf = fichiers.get(champ)
+        if not buf:
+            return None
+        buf.seek(0)
+        suffix = '.xlsx'
+        fd, path = tempfile.mkstemp(suffix=suffix, prefix=f'liq_{champ}_')
+        os.close(fd)
+        with open(path, 'wb') as f:
+            f.write(buf.read())
+        tmp_files.append(path)
+        return path
+
+    try:
+        mobile_path  = _tmp('mobile')
+        darbox_path  = _tmp('darbox')
+        b2b_path     = _tmp('fixe_b2b')
+        b2c_path     = _tmp('fixe_b2c')
+
+        mobile_data = proc.lire_fichier_mobile(mobile_path)      if mobile_path  else {}
+        darbox_data = proc.lire_fichier_darbox(darbox_path)      if darbox_path  else {}
+        b2b_data    = proc.lire_fichier_fixe_b2b(b2b_path)      if b2b_path     else {}
+        b2c_data    = proc.lire_fichier_fixe_b2c(b2c_path)      if b2c_path     else {}
+
+        resultats = proc.calculer_etat_complet(
+            mobile_data, darbox_data, b2b_data, b2c_data,
+            _DBAdapter(os.path.abspath(DB_PATH)),
+            societe,
+        )
+        if resultats:
+            logging.warning("DEBUG résultats: " + str({k: v for k, v in list(resultats.items())[:2]}))
+        return resultats
+
+    finally:
+        for path in tmp_files:
+            try:
+                os.unlink(path)
+            except Exception:
+                pass
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
