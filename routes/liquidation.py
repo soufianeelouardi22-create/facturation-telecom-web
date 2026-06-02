@@ -121,7 +121,11 @@ def _charger_processor():
 
 def _traiter_fichiers(fichiers, societe):
     """fichiers : dict {champ: BytesIO}. Retourne {code: {proc_key: valeur}}."""
-    proc        = _charger_processor()
+    proc = _charger_processor()
+    if fichiers.get('mobile'):    fichiers['mobile'].seek(0)
+    if fichiers.get('darbox'):    fichiers['darbox'].seek(0)
+    if fichiers.get('fixe_b2b'): fichiers['fixe_b2b'].seek(0)
+    if fichiers.get('fixe_b2c'): fichiers['fixe_b2c'].seek(0)
     mobile_data = proc.lire_fichier_mobile(fichiers['mobile'])      if fichiers.get('mobile')    else {}
     darbox_data = proc.lire_fichier_darbox(fichiers['darbox'])      if fichiers.get('darbox')    else {}
     b2b_data    = proc.lire_fichier_fixe_b2b(fichiers['fixe_b2b']) if fichiers.get('fixe_b2b') else {}
