@@ -290,7 +290,11 @@ def import_liq():
         total_glob = 0.0
 
         for code, primes in etat.items():
-            vals  = {col: round(float(primes.get(_PROC_KEY[col]) or 0), 4) for col in CHAMPS_DB}
+            vals = {col: round(float(primes.get(_PROC_KEY[col]) or 0), 4) for col in CHAMPS_DB}
+            # include fixe B2B+B2C prime d'accès (pa_fixe_global) in the prime_acces total
+            vals['prime_acces'] = round(
+                vals['prime_acces'] + float(primes.get('pa_fixe_global') or 0), 4
+            )
             total = sum(vals.values())
             total_glob += total
             nb_codes   += 1
